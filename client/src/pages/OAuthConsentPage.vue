@@ -64,7 +64,11 @@ async function decide(decision) {
   error.value = '';
   deciding.value = decision;
   try {
-    const res = await api.approveOAuthConsent({ ...query.value, decision });
+    const res = await api.approveOAuthConsent({
+      ...query.value,
+      scope: scopes.value.join(' '),
+      decision,
+    });
     const next = res?.redirectUrl ?? res?.redirect_uri ?? res?.redirectTo;
     if (next) {
       window.location.assign(next);
