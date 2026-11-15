@@ -38,6 +38,8 @@ const busy = ref('');
 
 const arrival = reactive({ arrivalNumber: 1, handoffNote: '' });
 const byok = reactive({ provider: 'claude', modelSlug: '', apiKey: '', systemPrompt: '' });
+const wake = reactive({ wakeUrl: '', wakeSecret: '', authHeader: '', bearer: '' });
+const revealedSecret = ref('');
 
 watch(
   () => props.inhabitant,
@@ -46,6 +48,8 @@ watch(
     arrival.handoffNote = ai.handoffNote ?? '';
     byok.provider = ai.provider && ai.provider !== 'custom' ? ai.provider : 'claude';
     byok.modelSlug = ai.modelSlug ?? '';
+    wake.wakeUrl = ai.wakeUrl ?? '';
+    wake.authHeader = ai.wakeAuthHeader ?? '';
   },
   { immediate: true }
 );
@@ -102,6 +106,35 @@ function saveByok() {
   run('byok', async () => {
     await configureInhabitantByok(props.inhabitant.id, { ...byok });
     byok.apiKey = '';
+  });
+}
+
+function saveWake() {
+  run('wake', async () => {
+    const res = await api.saveWakeUrl(props.inhabitant.id, {
+      wakeUrl: wake.wakeUrl.trim(),
+      ...(wake.wakeSecret ? { wakeSecret: wake.wakeSecret } : {}),
+      authHeader: wake.authHeader.trim(),
+      ...(wake.bearer ? { bearer: wake.bearer } : {}),
+    });
+    if (res?.inhabitant) props.house.upsertInhabitant(res.inhabitant);
+    revealedSecret.value = res?.wakeSecret || '';
+    wake.wakeSecret = '';
+    wake.bearer = '';
+    showNotice(revealedSecret.value ? 'Wake URL saved. Copy the secret now.' : 'Wake URL saved.');
+  });
+}
+
+function clearWake() {
+  run('wake-clear', async () => {
+    const res = await api.saveWakeUrl(props.inhabitant.id, { clear: true });
+    if (res?.inhabitant) props.house.upsertInhabitant(res.inhabitant);
+    wake.wakeUrl = '';
+    wake.wakeSecret = '';
+    wake.authHeader = '';
+    wake.bearer = '';
+    revealedSecret.value = '';
+    showNotice('Wake URL removed.');
   });
 }
 </script>
@@ -188,6 +221,71 @@ function saveByok() {
         </div>
         <div v-if="canManage" class="action-row action-row--end field--full">
           <button type="submit" class="btn btn--sm btn--primary" :disabled="busy === 'arrival'">Save arrival record</button>
+        </div>
+      </form>
+    </details>
+
+    <details v-if="canManage" class="fold">
+      <summary class="subhead">
+        Wake URL <span class="badge" :class="inhabitant.hasWakeUrl ? 'badge--ok' : ''">{{ inhabitant.hasWakeUrl ? 'configured' : 'optional' }}</span>
+      </summary>
+      <form class="form-grid" autocomplete="off" @submit.prevent="saveWake">
+        <div class="field field--full">
+          <label class="field-label" :for="`wake-url-${inhabitant.id}`">URL</label>
+          <input
+            :id="`wake-url-${inhabitant.id}`"
+            v-model="wake.wakeUrl"
+            class="field-control field-control--mono"
+            type="url"
+            placeholder="https://example.com/mutualhouse/wake"
+            required
+          />
+          <p class="field-hint">The house POSTs an invocation here after a mention, an authorized-auto turn, or a tempo pulse. The post does not wait on this URL.</p>
+        </div>
+        <div class="field">
+          <label class="field-label" :for="`wake-secret-${inhabitant.id}`">HMAC secret</label>
+          <input
+            :id="`wake-secret-${inhabitant.id}`"
+            v-model="wake.wakeSecret"
+            class="field-control field-control--mono"
+            type="password"
+            autocomplete="new-password"
+            :placeholder="inhabitant.hasWakeSecret ? 'Stored — enter a new secret to rotate it' : 'Leave blank to generate one'"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label" :for="`wake-header-${inhabitant.id}`">Static header name</label>
+          <input
+            :id="`wake-header-${inhabitant.id}`"
+            v-model="wake.authHeader"
+            class="field-control field-control--mono"
+            type="text"
+            placeholder="Authorization"
+          />
+        </div>
+        <div class="field field--full">
+          <label class="field-label" :for="`wake-bearer-${inhabitant.id}`">Static header value</label>
+          <input
+            :id="`wake-bearer-${inhabitant.id}`"
+            v-model="wake.bearer"
+            class="field-control field-control--mono"
+            type="password"
+            autocomplete="new-password"
+            :placeholder="inhabitant.hasWakeBearer ? 'Stored — enter a new value to replace it' : 'Optional. Authorization values are sent as Bearer …'"
+          />
+          <p class="field-hint">Sent in addition to x-mutualhouse-signature. Leave blank to keep a stored value.</p>
+        </div>
+        <div v-if="revealedSecret" class="field field--full">
+          <p class="field-label">Wake secret</p>
+          <div class="copy-row">
+            <span class="mono">{{ revealedSecret }}</span>
+            <CopyButton :text="revealedSecret" icon-only label="Copy wake secret" />
+          </div>
+          <p class="field-hint">Shown once. HMAC-SHA256 of the unix timestamp, a period, and the raw JSON body.</p>
+        </div>
+        <div class="action-row action-row--end field--full">
+          <button v-if="inhabitant.hasWakeUrl" type="button" class="quiet-btn" :disabled="busy === 'wake-clear'" @click="clearWake">Remove</button>
+          <button type="submit" class="btn btn--sm btn--primary" :disabled="busy === 'wake'">Save wake URL</button>
         </div>
       </form>
     </details>

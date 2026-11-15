@@ -9,6 +9,11 @@ import {
 } from './house-service.js';
 import { mapAttachmentRow, mintSignedReadUrl } from './media-and-calls.js';
 import { emitRoomWake } from './wake-bus.js';
+import {
+  dispatchInvocationWebhooks,
+  mergeAddressedAiIds,
+  recordAddressing,
+} from './invocations.js';
 
 /**
  * Atomically computes and inserts a byte-for-byte SHA-256 `ReadReceipt` inside `tx`
@@ -116,6 +121,8 @@ export async function executeRoomCommand(
 ) {
   const cleanCommandId = String(commandId || randomId('cmd'));
   const byokToInvoke = [];
+  const pulseByokToInvoke = [];
+  let webhookDelivery = null;
 
   const txResult = await db.transaction(async (tx) => {
     // 1. Idempotency check on `(actor_inhabitant_id, command_id)`
@@ -213,9 +220,20 @@ export async function executeRoomCommand(
       }
 
       const bodyHash = await sha256Hex(body);
-      const invokedIds = Array.isArray(payload.invokedInhabitantIds)
-        ? payload.invokedInhabitantIds
-        : [];
+      const { rows: aiRows } = await tx.query(
+        `SELECT id, kind, name, handle, arrival_number AS "arrivalNumber"
+         FROM inhabitants WHERE house_id = $1 AND kind = 'ai'`,
+        [houseId]
+      );
+      const invokedIds = mergeAddressedAiIds(
+        body,
+        aiRows.map((row) => ({
+          ...row,
+          arrivalNumber: row.arrivalNumber ?? row.arrival_number,
+        })),
+        payload.invokedInhabitantIds,
+        actor.id
+      );
 
       const { rows: turnRows } = await tx.query(
         `INSERT INTO turns (
@@ -329,6 +347,21 @@ export async function executeRoomCommand(
         ]
       );
       emittedEvents.push(mapRoomEventRow(postEvRows[0]));
+      const addressing = await recordAddressing(tx, {
+        houseId,
+        roomId,
+        actor,
+        eventSeq: postEvRows[0].event_seq,
+        turnId,
+        turnSeq: nextTurnSeq,
+        body,
+        explicitIds: invokedIds,
+        routingMode: roomRow.routing_mode,
+        paused: Boolean(roomRow.paused || autoPaused),
+        originUrl,
+      });
+      byokToInvoke.push(...addressing.byokIds);
+      if (addressing.webhookTargets.length) webhookDelivery = addressing;
 
       // If blind_simultaneous predicate completed on this turn, emit `seal.released` in the SAME TX!
       if (autoUnveiledTurns && createdOrUpdatedSeal?.status === 'released') {
@@ -352,17 +385,6 @@ export async function executeRoomCommand(
           ]
         );
         emittedEvents.push(mapRoomEventRow(relEvRows[0]));
-      }
-
-      // Check if any invoked AI inhabitants use Phase 1b Door 4 (`byok_hosted`)
-      if (invokedIds.length > 0 && !(roomRow.paused || autoPaused)) {
-        const { rows: byokRows } = await tx.query(
-          `SELECT id FROM inhabitants
-           WHERE house_id = $1 AND id = ANY($2::text[])
-             AND kind = 'ai' AND encrypted_provider_credentials IS NOT NULL`,
-          [houseId, invokedIds]
-        );
-        for (const r of byokRows) byokToInvoke.push(r.id);
       }
 
       return {
@@ -491,6 +513,17 @@ export async function executeRoomCommand(
           JSON.stringify({ pulsedBy: actor.id, targetInhabitantIds: targets }),
         ]
       );
+      const addressing = await recordAddressing(tx, {
+        houseId,
+        roomId,
+        actor,
+        eventSeq: evRows[0].event_seq,
+        pulse: true,
+        pulseTargetIds: targets,
+        originUrl,
+      });
+      pulseByokToInvoke.push(...addressing.pulseByokIds);
+      if (addressing.webhookTargets.length) webhookDelivery = addressing;
       return { pulsed: true, events: [mapRoomEventRow(evRows[0])] };
     }
 
@@ -500,10 +533,30 @@ export async function executeRoomCommand(
   // Wake any waiting browser or Door 2 agent long-polls immediately
   emitRoomWake(roomId, houseId);
 
-  // Trigger optional Phase 1b Door 4 BYOK inhabitants asynchronously if invoked
-  if (byokToInvoke.length > 0) {
+  if (webhookDelivery) {
+    dispatchInvocationWebhooks(webhookDelivery.webhookTargets, webhookDelivery.context);
+  }
+
+  // Door 4 reads the same invocation rows as Door 2, including authorized_auto.
+  // A tempo pulse still runs while the room is paused.
+  if (byokToInvoke.length > 0 || pulseByokToInvoke.length > 0) {
     import('./byok-runner.js')
-      .then((m) => m.invokeByokInhabitants(db, { houseId, roomId, inhabitantIds: byokToInvoke, originUrl }))
+      .then((m) =>
+        Promise.all([
+          byokToInvoke.length
+            ? m.invokeByokInhabitants(db, { houseId, roomId, inhabitantIds: byokToInvoke, originUrl })
+            : null,
+          pulseByokToInvoke.length
+            ? m.invokeByokInhabitants(db, {
+                houseId,
+                roomId,
+                inhabitantIds: pulseByokToInvoke,
+                originUrl,
+                allowPaused: true,
+              })
+            : null,
+        ])
+      )
       .catch((err) => console.warn('[byok-runner]', err));
   }
 

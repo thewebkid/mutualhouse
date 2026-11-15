@@ -78,6 +78,7 @@ import {
   sha256HexNode,
 } from './services/crypto.js';
 import { emitRoomWake, waitForWakeOrTimeout } from './services/wake-bus.js';
+import { claimInvocations, invocationToListenWake, saveInhabitantWake } from './services/invocations.js';
 
 let _app = null;
 
@@ -358,52 +359,11 @@ export function createServerApp() {
     );
 
     while (true) {
-      const { rows } = await db.query(
-        `SELECT e.*, r.slug AS room_slug, r.paused AS room_paused, r.routing_mode
-         FROM room_events e
-         JOIN rooms r ON r.id = e.room_id
-         WHERE e.house_id = $1 AND e.event_seq > $2
-         ORDER BY e.event_seq ASC
-         LIMIT 100`,
-        [verified.houseId, afterSeq]
-      );
-
-      if (rows.length > 0) {
-        const headEventSeq = Number(rows[rows.length - 1].event_seq);
-        const wakesByRoom = new Map();
-
-        for (const ev of rows) {
-          if (ev.actor_inhabitant_id === inhabitantId) continue;
-          const targets = Array.isArray(ev.target_inhabitant_ids) ? ev.target_inhabitant_ids : [];
-          const explicitlyTargeted = targets.includes(inhabitantId);
-
-          if (ev.type === 'room.pulse' && (targets.length === 0 || explicitlyTargeted)) {
-            wakesByRoom.set(ev.room_id, {
-              roomId: ev.room_id,
-              roomSlug: ev.room_slug,
-              reason: 'pulse',
-              eventSeq: Number(ev.event_seq),
-            });
-          } else if (
-            ev.type === 'turn.posted' &&
-            !ev.room_paused &&
-            (explicitlyTargeted || ev.routing_mode === 'authorized_auto')
-          ) {
-            wakesByRoom.set(ev.room_id, {
-              roomId: ev.room_id,
-              roomSlug: ev.room_slug,
-              reason: explicitlyTargeted ? 'invoked' : 'authorized_auto',
-              eventSeq: Number(ev.event_seq),
-            });
-          }
-        }
-
-        if (wakesByRoom.size > 0 || Date.now() >= deadline) {
-          return c.json({
-            headEventSeq,
-            wakes: [...wakesByRoom.values()],
-          });
-        }
+      const pending = await claimInvocations(db, inhabitantId, { afterEventSeq: afterSeq });
+      if (pending.length > 0) {
+        const wakes = pending.map(invocationToListenWake);
+        const headEventSeq = Math.max(afterSeq, ...wakes.map((wake) => Number(wake.eventSeq) || 0));
+        return c.json({ headEventSeq, wakes });
       }
 
       const remaining = deadline - Date.now();
@@ -1041,6 +1001,45 @@ export function createServerApp() {
       viewerUserId: user.id,
     });
     return c.json({ inhabitant: refreshed.viewerHouse.getInhabitant(inhId)?.def });
+  });
+
+  app.put('/api/inhabitants/:inhabitantId/wake', async (c) => {
+    const db = await getDb();
+    const user = await getSessionUser(c, db);
+    if (!user) return c.json({ error: 'Authentication required.' }, 401);
+
+    const inhId = c.req.param('inhabitantId');
+    const { rows: targetRows } = await db.query(
+      `SELECT * FROM inhabitants WHERE id = $1 AND kind = 'ai' LIMIT 1`,
+      [inhId]
+    );
+    if (!targetRows[0]) return c.json({ error: 'AI inhabitant not found.' }, 404);
+
+    const ctx = await hydrateHouseForViewer(db, {
+      houseIdOrSlug: targetRows[0].house_id,
+      viewerUserId: user.id,
+    });
+    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) {
+      return c.json({ error: 'Steward permission required.' }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const saved = await saveInhabitantWake(db, inhId, body);
+    const refreshed = await hydrateHouseForViewer(db, {
+      houseIdOrSlug: targetRows[0].house_id,
+      viewerUserId: user.id,
+    });
+    return c.json({
+      inhabitant: refreshed.viewerHouse.getInhabitant(inhId)?.def,
+      wakeSecret: saved.wakeSecret,
+      wake: {
+        wakeUrl: saved.wakeUrl,
+        authHeader: saved.authHeader,
+        hasWakeSecret: saved.hasWakeSecret,
+        hasWakeBearer: saved.hasWakeBearer,
+        cleared: saved.cleared,
+      },
+    });
   });
 
   // ===========================================================================

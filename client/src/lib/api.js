@@ -87,6 +87,11 @@ export const api = {
       method: 'PUT',
       body: data,
     }),
+  saveWakeUrl: (inhabitantId, data) =>
+    request(`/api/inhabitants/${encodeURIComponent(inhabitantId)}/wake`, {
+      method: 'PUT',
+      body: data,
+    }),
 
   // OAuth 2.1 Consent screen inspection & approval
   getOAuthAuthorizeDetails: (query) =>

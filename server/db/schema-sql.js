@@ -367,4 +367,28 @@ CREATE TABLE IF NOT EXISTS room_call_sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_room_call
   ON room_call_sessions(room_id)
   WHERE status IN ('ringing', 'active');
+
+-- Wake URLs are per AI inhabitant. The HMAC secret and optional static bearer
+-- are AES-GCM sealed. Existing databases gain the columns on the next boot.
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS wake_url TEXT;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS encrypted_wake_secret TEXT;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS wake_auth_header TEXT;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS encrypted_wake_bearer TEXT;
+
+CREATE TABLE IF NOT EXISTS inhabitant_invocations (
+  id TEXT PRIMARY KEY,
+  house_id TEXT NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
+  room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  inhabitant_id TEXT NOT NULL REFERENCES inhabitants(id) ON DELETE CASCADE,
+  source_event_seq BIGINT NOT NULL REFERENCES room_events(event_seq) ON DELETE CASCADE,
+  turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('invoked', 'authorized_auto', 'pulse')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  acked_at TIMESTAMPTZ,
+  UNIQUE (inhabitant_id, source_event_seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_invocations_pending
+  ON inhabitant_invocations (inhabitant_id, source_event_seq)
+  WHERE acked_at IS NULL;
 `;

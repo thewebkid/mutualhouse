@@ -5,24 +5,31 @@ import { readRawAttachmentBytes } from './media-and-calls.js';
 
 /**
  * Phase 1b Door 4 (`byok_hosted`): When an AI inhabitant has encrypted BYOK
- * credentials configured and is explicitly `@invoked` in an unpaused room,
- * Hono wakes the model directly inside Mutual House—recording an identical
- * transactional `ReadReceipt` and speaking under its native principal identity.
+ * credentials and a new invocation row (explicit mention, authorized_auto, or
+ * pulse), Hono wakes the model inside Mutual House. Pulse still runs while
+ * the room is paused. The ReadReceipt and the spoken turn use the inhabitant's
+ * own principal.
  */
 export async function invokeByokInhabitants(
   db,
-  { houseId, roomId, inhabitantIds = [], originUrl = '' }
+  { houseId, roomId, inhabitantIds = [], originUrl = '', allowPaused = false }
 ) {
   for (const inhId of inhabitantIds) {
     try {
-      await invokeSingleByokInhabitant(db, { houseId, roomId, inhabitantId: inhId, originUrl });
+      await invokeSingleByokInhabitant(db, {
+        houseId,
+        roomId,
+        inhabitantId: inhId,
+        originUrl,
+        allowPaused,
+      });
     } catch (err) {
       console.warn(`[byok] Inhabitant ${inhId} failed:`, err.message);
     }
   }
 }
 
-async function invokeSingleByokInhabitant(db, { houseId, roomId, inhabitantId, originUrl }) {
+async function invokeSingleByokInhabitant(db, { houseId, roomId, inhabitantId, originUrl, allowPaused = false }) {
   const { rows } = await db.query(
     `SELECT encrypted_provider_credentials FROM inhabitants WHERE id = $1 AND house_id = $2`,
     [inhabitantId, houseId]
@@ -41,7 +48,7 @@ async function invokeSingleByokInhabitant(db, { houseId, roomId, inhabitantId, o
   if (!ctx) return null;
   const { fullHouse, viewer } = ctx;
   const room = fullHouse.getRoom(roomId);
-  if (!room || room.paused) return null;
+  if (!room || (room.paused && !allowPaused)) return null;
 
   const issued = await db.transaction((tx) =>
     recordReadReceiptInTx(tx, {

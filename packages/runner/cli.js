@@ -11,8 +11,9 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
  * Connects an AI inhabitant (`mh_...` bearer key) directly to its House rooms:
  *  1. Calls `house_enter` over stateless Streamable HTTP (`/mcp/inh/:inhabitantId`)
  *     to log its arrival receipt and receive confirmed House Memory + Constitution.
- *  2. Loops on `POST /api/inh/:inhabitantId/listen` (20s idle cursor wait, 0 LLM tokens).
- *  3. Wakes immediately when `@invoked` or when a human taps `.` in the room,
+ *  2. Drains `house_inbox`, then loops on `POST /api/inh/:inhabitantId/listen`
+ *     (20s idle cursor wait, 0 LLM tokens).
+ *  3. Wakes on an invocation row (`invoked`, `authorized_auto`, or a `.` pulse),
  *     calls `house_read`, invokes your configured LLM (xAI Grok, Anthropic, or OpenAI),
  *     and posts its verbatim response back via `house_post`!
  *
@@ -141,7 +142,41 @@ async function main() {
   const arrivalMarkdown = enterRes.content?.[0]?.text || '';
   console.log(`[runner] Entered House · Memory v${enterRes.structuredContent?.memoryVersion ?? 0}`);
 
-  let afterEventSeq = Number(who.headEventSeq || 0);
+  let afterEventSeq = 0;
+
+  async function respondToWake(wake) {
+    console.log(`[runner] Woken in #${wake.roomSlug} (${wake.reason})`);
+    const readRes = await callMcpTool(inhabitant.id, 'house_read', {
+      roomSlug: wake.roomSlug,
+    });
+    const sc = readRes.structuredContent;
+    if (sc?.paused && wake.reason !== 'pulse') {
+      console.log(`[runner] #${wake.roomSlug} is paused — holding response.`);
+      return;
+    }
+    const roomContextText = readRes.content?.[0]?.text || '';
+    const latestTurn = sc?.turns?.[sc.turns.length - 1] ?? null;
+    const reply = await generateModelReply(
+      `${arrivalMarkdown}\n\nNever prefix your reply with "${inhabitant.name} here:" — speak cleanly in your own voice.`,
+      roomContextText
+    );
+    if (reply.trim()) {
+      await callMcpTool(inhabitant.id, 'house_post', {
+        roomSlug: wake.roomSlug,
+        body: reply.trim(),
+        replyToId: latestTurn?.id,
+        sealId: latestTurn?.sealId || undefined,
+        readReceiptId: sc?.readReceiptId,
+      });
+      console.log(`[runner] Posted response to #${wake.roomSlug}`);
+    }
+  }
+
+  const inboxRes = await callMcpTool(inhabitant.id, 'house_inbox', {});
+  for (const wake of inboxRes.structuredContent?.invocations || []) {
+    await respondToWake(wake);
+    if (Number(wake.sourceEventSeq) > afterEventSeq) afterEventSeq = Number(wake.sourceEventSeq);
+  }
 
   const shutdown = async () => {
     console.log('\n[runner] Departing House cleanly...');
@@ -176,33 +211,7 @@ async function main() {
       }
 
       for (const wake of data.wakes || []) {
-        console.log(`[runner] Woken in #${wake.roomSlug} (${wake.reason})`);
-        const readRes = await callMcpTool(inhabitant.id, 'house_read', {
-          roomSlug: wake.roomSlug,
-        });
-        const sc = readRes.structuredContent;
-        if (sc?.paused) {
-          console.log(`[runner] #${wake.roomSlug} is paused — holding response.`);
-          continue;
-        }
-        const roomContextText = readRes.content?.[0]?.text || '';
-        const latestTurn = sc?.turns?.[sc.turns.length - 1] ?? null;
-
-        const reply = await generateModelReply(
-          `${arrivalMarkdown}\n\nNever prefix your reply with "${inhabitant.name} here:" — speak cleanly in your own voice.`,
-          roomContextText
-        );
-
-        if (reply.trim()) {
-          await callMcpTool(inhabitant.id, 'house_post', {
-            roomSlug: wake.roomSlug,
-            body: reply.trim(),
-            replyToId: latestTurn?.id,
-            sealId: latestTurn?.sealId || undefined,
-            readReceiptId: sc?.readReceiptId,
-          });
-          console.log(`[runner] Posted response to #${wake.roomSlug}`);
-        }
+        await respondToWake(wake);
       }
     } catch (err) {
       console.warn('[runner] poll retry:', err.message);
