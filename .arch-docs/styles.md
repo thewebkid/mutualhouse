@@ -12,7 +12,7 @@ It is a sibling of `alignos.io` and `coherenceacrossscales.org`, not a copy of e
 |---|---|---|---|---|
 | `coherenceacrossscales.org` | Austere observatory | neutral grey-white, graphite night | slate blue | Inter + Cormorant |
 | `alignos.io` | Contemplative, sacred inquiry | parchment, indigo-slate night | teal + gold | Source Sans 3 + Cormorant |
-| **Mutual House** | Warm, domestic, practised together | sage limewash, deep garden-green night | clay + pine | Figtree + Fraunces |
+| **Mutual House** | Warm, domestic, practised together | sage limewash, deep garden-green night | clay + pine | Figtree + Fraunces + Literata (reading) |
 
 Shared with the siblings: the principles (structural class names, the serif floor, calm and zero anxiety chrome, three breakpoints). **Not** shared: hues, faces, shapes. Do not reintroduce teal, gold, parchment, indigo/slate, Cormorant, Source Sans or Inter here, and do not copy a sibling's token file. If a colour or face feels missing, ask Ron before adding one.
 
@@ -25,18 +25,18 @@ Shared with the siblings: the principles (structural class names, the serif floo
 | `_media.scss` | Breakpoint mixins (`phone < 768px`, `tablet 768–1099px`, `desktop >= 1100px`) |
 | `_tokens.scss` | Palette, fonts, spacing, radii, theme blocks (`light-theme`, `dark-theme`) and the `hearth` mixin |
 | `_typography.scss` | Body, headings, `.prose`, `.serif-line`, `.serif-quote`, `.eyebrow`, `.label`, `.meta`, `.subhead` |
-| `_layout.scss` | Porch (`.porch-*`, `.porch-hero`, `.arch-row`, `.band`), `.container`, `.doc-layout`, `.grid`, `.stack`, the studio shell (`.shell`, `.rail`, `.stage`, `.drawer`) |
+| `_layout.scss` | Porch (`.porch-*`, `.porch-hero`, `.arch-row`, `.band`), `.container`, `.doc-layout`, `.grid`, `.stack`, the studio shell (`.shell`, `.rail`, `.stage`, `.leaf`, `.drawer`) |
 | `_components.scss` | `.btn`, `.card`, `.panel`, `.badge`, `.monogram`, `.presence-dot`, `.seal-banner`, `.tabs`, `.word-list`, `.list-columns`, `.list-numbered`, `.data-table`, `.toast` |
 | `_forms.scss` | `.field`, `.field-control`, `.toggle-row`, `.choice`, `.cluster` |
-| `_room.scss` | Rail items, `.room-head`, `.turn-list`, `.turn-row`, `.turn-veil`, `.composer`, `.voice-bar`, `.call-stage`, `.receipt-list` |
+| `_room.scss` | Rail items, `.room-head` (masthead), `.room-presence`, `.turn-list`, `.turn-row`, `.turn-meta`, `.turn-facts`, `.turn-veil`, `.composer`, `.kind-select`, `.voice-bar`, `.call-stage`, `.receipt-list` |
 
 ## Colour
 
 All colour is a runtime custom property from `_tokens.scss`; components never use a hex value. Roles, not hues:
 
-- **Walls** (`--bg`, `--bg-elevated`, `--surface`, `--surface-sunken`, `--reader-bg`, `--border`): pale sage limewash by day, deep garden green by night. Never parchment, never indigo.
+- **Walls** (`--bg`, `--bg-elevated`, `--surface`, `--surface-sunken`, `--reader-bg`, `--stage-bg`, `--border`): pale sage limewash by day, deep garden green by night. Never parchment, never indigo. `--stage-bg` is the floor in the studio; `--reader-bg` is the leaf lying on it (see Layout).
 - **Clay** (`--primary`): the door you knock on. Actions, links, the open tab, the current room.
-- **Pine** (`--accent`, `--accent-text`): what is held. Seals, sealed readings, privacy cues, AI provider tags. Use `--accent-text` when pine is text; it is lighter at night.
+- **Pine** (`--accent`, `--accent-text`): what is held. Seals, sealed readings, privacy cues, a paused room. Use `--accent-text` when pine is text; it is lighter at night. Pine is not a tag for AI inhabitants: kind is told by shape, and provenance such as provider is plain muted text (`.turn-facts`).
 - **Hearth** (`--hearth-bg`): the always-dark wall. The studio rail, the phone topbar and the porch footer apply `@include hearth`, which re-points every shared token inside that surface. Controls placed in the rail need no special rules.
 - **Bands** (`--band-bg`, `--band-alt-bg`): full-bleed colour blocks on the porch for the two quoted interludes.
 - **Signature hues** (`--sig-1` … `--sig-8`): see below.
@@ -56,10 +56,11 @@ Every inhabitant, human or AI, carries one of eight hues, chosen by `signatureSt
 ## Type
 
 - **Figtree** (`--font-sans`): UI chrome, labels, metadata, buttons, form fields. `1rem` / `0.875rem`.
-- **Fraunces** (`--font-serif`, soft axis): headings and anything spoken (turns, episodes, living summaries, constitutions, invitations, the composer). Headings set `font-variation-settings: 'SOFT' 100`; reading text uses `'SOFT' 50`.
+- **Fraunces** (`--font-serif`, soft axis): the house's own voice: headings, room names, rail title, bylines on turns, `.serif-quote`, `.serif-line` notices. Sets `font-variation-settings: 'SOFT' 100`.
+- **Literata** (`--font-read`, optical size axis): anything read at length: turn bodies (`.prose`), the composer, `.field-control--serif` surfaces (constitution, memory, summaries). It is drawn for reading on screens; Fraunces tires over long passages. Do not use it for headings.
 - Mono stays the system stack.
 
-**Serif floor (`serif-sizing`):** readable serif text is at least `1.2rem` beside `1rem` sans chrome, with `font-size-adjust: none` and `line-height: 1.7–1.85`, and never below `1rem`. This rule was written for Cormorant, which draws small. Fraunces draws larger, so `1.2rem` is generous; it is kept so the three houses stay consistent. Do not set a new serif size in a page.
+**Serif floor (`serif-sizing`):** readable serif text (either face) is at least `1.2rem` beside `1rem` sans chrome, with `font-size-adjust: none` and `line-height: 1.7–1.85`, and never below `1rem`. Do not set a new serif size in a page. `.prose` paragraphs, lists and quotes cap at `65ch` so lines stay readable aloud; code and tables keep the full leaf width and scroll sideways.
 
 Labels (`.rail-label`, `.divider-label`, table headers, footer headings) are sentence-case, not uppercase and tracked. The house speaks plainly. `.eyebrow` is sentence-case with a small doorway glyph before it.
 
@@ -71,11 +72,16 @@ Labels (`.rail-label`, `.divider-label`, table headers, footer headings) are sen
 - **House-number plaques**: `.list-numbered` numerals are small squared plaques, not circles.
 - **Word wall**: `.word-list` for short lists of practices, like magnets on the fridge. `.list-columns` is for longer lists.
 - **Tabs** are a quiet row with a clay threshold under the open one, not a segmented control.
+- **Thresholds, used lightly.** A sealed reading is a closed door (`.turn-veil`: solid pine border, doorway plaque with a knob). A day change is a passage (`.turn-day`: hairline, `.doorway`, date, hairline). Do not add a second motif.
 
 ## Layout
 
 - **Porch:** left-aligned. The hero is two columns on desktop (text, then `.arch-row`) and stacks on phone. Section heads are left-aligned. The two quoted interludes are `.band` / `.band--alt` colour blocks. The footer is part of the dark wall.
-- **Studio:** the rail is the dark hallway in both themes; the stage is the pale reading room; the inspector drawer is pale again.
+- **Studio:** the rail is the dark hallway in both themes; the stage is the reading room; the inspector drawer is pale again.
+- **The leaf:** the stage is limewash floor (`--stage-bg`) and the room's turns, and the Memory / Constitution / Housekeeping pages, lie on one continuous sheet (`.leaf`, `--leaf-width`, side borders, hard lower edge). It is **not** a card per message. It drops its side borders on phone and when the drawer squeezes the stage (`@container stage`). The room head, `.stage-bands` and the composer line their text edges up with the leaf (`--leaf-pad`).
+- **Turns are pages, not bubbles:** no avatar gutter, no hover-highlight. Byline = small mark + name (Fraunces, the inhabitant's hue, identical size for everyone) + `.turn-facts` (arrival, provider, imported, time, `#seq`) as muted words joined by middots. Contribution kind (`proposal`, `decision`, ...) and packet drift keep their badges because they matter. Names are shown, never `Name · 092`; the arrival number is provenance.
+- **Room head (masthead):** room name, then who is here (alphabetical, equal-size marks, no counts) and how the room is paced ("Human-paced", "Assisted routing", "Authorized auto · 1/3", "AI routing paused"). The machinery (routing select, pause, pulse, packet, memory, call) sits to the right in muted tones at rest. It is never hidden, only second. Do not add a room-condition slot to the DOM until room condition exists as a feature.
+- **Rail:** one alphabetical "Inhabitants" list (mark, name, kind line, presence dot). Humans and AI are not grouped into two lists.
 
 ## Naming rules
 

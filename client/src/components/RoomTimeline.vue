@@ -47,10 +47,14 @@ function pad(n) {
   return String(n ?? 1).padStart(3, '0');
 }
 
+// Show inhabitants by name; the arrival number is provenance and sits among the quiet facts
 function authorLabel(turn) {
+  return turn.author?.name ?? 'Unknown inhabitant';
+}
+
+function arrivalLabel(turn) {
   const a = turn.author;
-  if (!a) return 'Unknown inhabitant';
-  return a.isAi ? `${a.name} · ${pad(a.arrivalNumber)}` : a.name;
+  return a?.isAi ? `arrival ${pad(a.arrivalNumber)}` : '';
 }
 
 function excerpt(text = '', n = 120) {
@@ -182,9 +186,11 @@ onBeforeUnmount(() => {
       <p class="meta">Whatever is spoken here stays inside the house unless the house releases it.</p>
     </div>
 
-    <ol v-else ref="list" class="turn-list">
+    <ol v-else ref="list" class="turn-list leaf">
       <template v-for="entry in entries" :key="entry.key">
-        <li v-if="entry.day" class="divider-label turn-day" role="separator">{{ entry.day }}</li>
+        <li v-if="entry.day" class="divider-label turn-day" role="separator">
+          <span class="doorway" aria-hidden="true"></span>{{ entry.day }}
+        </li>
 
         <li
           v-else
@@ -197,26 +203,22 @@ onBeforeUnmount(() => {
             'is-highlighted': highlightedId === entry.turn.id,
           }"
         >
-          <InhabitantMark :inhabitant="entry.turn.author" />
-
           <article class="turn-main">
             <header class="turn-meta">
+              <InhabitantMark small :inhabitant="entry.turn.author" />
               <span class="turn-author">{{ authorLabel(entry.turn) }}</span>
-              <span v-if="entry.turn.author?.isAi" class="badge badge--accent">{{ entry.turn.author.provider }}</span>
-              <time :datetime="entry.turn.createdAt" :title="entry.turn.createdAt">
-                {{ formatShortTime(entry.turn.createdAt) }}
-              </time>
-              <span class="turn-seq">#{{ entry.turn.seq }}</span>
-              <span class="turn-badges">
-                <span
-                  v-if="entry.turn.origin === 'imported' || entry.turn.author?.isAi"
-                  class="badge"
-                  :class="entry.turn.origin === 'imported' ? 'badge--outline' : ''"
-                >{{ entry.turn.origin }}</span>
-                <span v-if="entry.turn.packetDrift" class="badge badge--warn" title="The pasted receipt fence was modified">drift</span>
-                <span v-if="entry.turn.contributionKind && entry.turn.contributionKind !== 'turn'" class="badge badge--primary">
-                  {{ entry.turn.contributionKind }}
-                </span>
+              <span v-if="entry.turn.contributionKind && entry.turn.contributionKind !== 'turn'" class="badge badge--primary">
+                {{ entry.turn.contributionKind }}
+              </span>
+              <span v-if="entry.turn.packetDrift" class="badge badge--warn" title="The pasted receipt fence was modified">drift</span>
+              <span class="turn-facts">
+                <span v-if="arrivalLabel(entry.turn)">{{ arrivalLabel(entry.turn) }}</span>
+                <span v-if="entry.turn.author?.isAi">{{ entry.turn.author.provider }}</span>
+                <span v-if="entry.turn.origin === 'imported'">imported</span>
+                <time :datetime="entry.turn.createdAt" :title="entry.turn.createdAt">
+                  {{ formatShortTime(entry.turn.createdAt) }}
+                </time>
+                <span class="turn-seq">#{{ entry.turn.seq }}</span>
               </span>
             </header>
 
