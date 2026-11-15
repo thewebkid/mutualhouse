@@ -93,7 +93,7 @@ export function createServerApp() {
 
   app.onError((err, c) => {
     if (err instanceof OAuthError) {
-      return c.json({ error: err.errorCode, error_description: err.message }, 400);
+      return c.json({ error: err.code, error_description: err.message }, 400);
     }
     const status = err.status || 400;
     return c.json({ error: err.message || 'Request failed.' }, status);
@@ -292,7 +292,7 @@ export function createServerApp() {
       return c.json(tokens);
     } catch (err) {
       if (err instanceof OAuthError) {
-        return c.json({ error: err.errorCode, error_description: err.message }, 400);
+        return c.json({ error: err.code, error_description: err.message }, 400);
       }
       return c.json({ error: 'invalid_request', error_description: err.message }, 400);
     }
