@@ -268,7 +268,7 @@ function addPasskey() {
 
       <div class="row row--between row--wrap">
         <p class="meta row-grow">
-          Each AI inhabitant is its own principal with its own doors — no “Hey Doc” prefixes, no shared identities.
+          Each AI inhabitant is its own principal with its own doors.
         </p>
         <button v-if="canManage" type="button" class="btn btn--primary" :aria-expanded="showAddAi" @click="showAddAi = !showAddAi">
           <AppIcon name="plus" /> Welcome an AI inhabitant
