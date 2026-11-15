@@ -1,32 +1,27 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Project: Mutual House (mutualhouse.org) — a household-scale relational practice environment where differentiated human and AI signatures collaborate across rooms with truthful provenance, curated House Memory, and strict inside-by-default sovereignty.
+  Sibling ecosystem:
+    - alignos.io (House of Inquiry and Meaning)
+    - coherenceacrossscales.org (House of Observation: PMA readings + anonymous MCI instrument)
+    - mutualhouse.org (The Inhabited Hearth & Studio — starting with Ron's house "The Now" and self-service creation for "Locality 0001" and future houses)
+  Locked Tech Stack:
+    - Frontend: Vue 3.5 + Vite 7 + Vue Router 4 + vite-plugin-pwa + handwritten architectural SCSS (no Tailwind, no UI component frameworks, no noisy SaaS chrome)
+    - Central Domain Models: Isomorphic ES classes in `shared/models/` modeled on `becise` (`static props = [...]`, `static create(def, parent)` polymorphic factories, `get def()` via duck-typed `raw(inst)` without importing Vue on the server), wrapped once in Vue `reactive(House.create(def))` on the client and mutated exclusively through `client/lib/mut/house-orchestration.js` commands + server event reconciliation (never whole-tree `House.sync()` overwrites).
+    - Backend & MCP: Hono on Vercel Fluid Compute (Node.js 24 ESM, 300s default timeout), official MCP TypeScript SDK v2 (`@modelcontextprotocol/server` + `@modelcontextprotocol/hono`, spec `2026-07-28` stateless Streamable HTTP) mounted at path-scoped inhabitant resources `/mcp/inh/:inhabitantId`.
+    - Database: Single Neon Serverless Postgres (`@neondatabase/serverless` + Drizzle ORM or explicit SQL migrations) holding Houses, Inhabitants, Grants, Rooms, Turns, Seals, Read Receipts, Room Events, 3-Tier House Memory (`LLMRecursion` weave), Constitutions, and Call Sessions.
+    - Auth: Better Auth (`better-auth` + `@better-auth/mcp` + `@better-auth/cimd`) in Neon Postgres + Resend magic links + Passkeys for humans; RFC 8707/9728 path-scoped OAuth 2.1 grants for Door 1 consumer MCP connectors; SHA-256 hashed `mh_...` bearer keys for Door 2 agent runners (`Doc`).
+    - Media & Realtime Calls: Private Cloudflare R2 bucket (presigned `PUT` with signed `ContentLength` + `Content-Type`, short-lived signed `GET`, $0 egress); browser-native `MediaRecorder` inline voice notes; browser-native 2-occupant `RTCPeerConnection` audio/video calls with Cloudflare TURN.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+rules:
+  proposal:
+    - Preserve Mutual House philosophical invariants from Working Brief v0.1 and Architectural Brief v0.3 (blank by default, inside by default, practice before platform, routing as judgment, truthful provenance, infrastructure disclosure).
+    - Clearly delineate Phase 1a ("The Now" & Self-Service Foundation + Multi-Door MCP + Memory + Voice/P2P Calls) vs Phase 1b (Optional BYO-API-Key In-House Invocation + MCP Apps `ui://` Room Card + Full House Export) vs Deferred Phase 2 (Template Commons, Lattice Archive, Cross-House Exchange, 3+ participant SFU).
+  specs:
+    - Write testable requirements and concrete WHEN/THEN scenarios covering normal flows, sealed-visibility boundaries, auth scope enforcement, and platform edge cases (Safari audio/mp4, OAuth audience checks, seal unveiling cursor catch-up).
+  design:
+    - Document the isomorphic `shared/models/` class hierarchy, `house-orchestration.js` command/event flow, Postgres schema, path-scoped MCP OAuth 2.1 security model, 3-tier `LLMRecursion` memory weave, and R2/WebRTC browser mechanics.
+    - Never use whole-graph `House.sync()` writes for multi-inhabitant rooms; hydrate snapshots via `House.create(def)` and mutate via idempotent commands (`commandId`) producing monotonic `room_events`.
+  tasks:
+    - Order tasks in vertical, testable slices so Ron can inhabit "The Now" early and inspect domain models and orchestration under the hood.

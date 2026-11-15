@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>The Mutual House</title>
+    <meta
+      name="description"
+      content="A household-scale laboratory for mutual civilization — a sovereign locality where differentiated human and AI signatures practice together."
+    />
+    <meta name="theme-color" content="#f8f6f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1f2e" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/brand/house-mark.svg" />
+    <link rel="apple-touch-icon" href="/brand/house-mark.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Source+Sans+3:wght@400;500;600&display=swap"
+    />
+
+    <script>
+      // Apply the saved theme before first paint so dark-mode visitors never see a parchment flash.
+      (function () {
+        try {
+          var saved = localStorage.getItem('mh-theme');
+          var theme =
+            saved === 'light' || saved === 'dark'
+              ? saved
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

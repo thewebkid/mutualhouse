@@ -1,0 +1,41 @@
+// Breakpoint mixins only — this partial emits no CSS, so components may `@use` it freely.
+// Phone < 768px · Tablet 768–1099px · Desktop >= 1100px
+
+$bp-tablet: 768px;
+$bp-desktop: 1100px;
+
+@mixin phone {
+  @media (max-width: #{$bp-tablet - 1px}) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (min-width: $bp-tablet) and (max-width: #{$bp-desktop - 1px}) {
+    @content;
+  }
+}
+
+@mixin tablet-up {
+  @media (min-width: $bp-tablet) {
+    @content;
+  }
+}
+
+@mixin below-desktop {
+  @media (max-width: #{$bp-desktop - 1px}) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: $bp-desktop) {
+    @content;
+  }
+}
+
+@mixin can-hover {
+  @media (hover: hover) and (pointer: fine) {
+    @content;
+  }
+}
