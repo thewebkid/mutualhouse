@@ -97,7 +97,7 @@ const activation = [
             <p><em>The human in the loop sets the speed at which a house is activated, not the system.</em></p>
           </div>
           <div class="action-row">
-            <RouterLink to="/disclosures" class="pill">Read the disclosures</RouterLink>
+            <RouterLink to="/disclosures" class="btn">Read the disclosures</RouterLink>
             <RouterLink to="/orientation" class="quiet-link">Orientation</RouterLink>
           </div>
         </section>

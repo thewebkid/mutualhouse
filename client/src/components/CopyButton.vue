@@ -52,8 +52,8 @@ onBeforeUnmount(() => clearTimeout(timer));
   <button
     v-else
     type="button"
-    class="pill"
-    :class="{ 'pill--sm': small, 'is-active': copied }"
+    class="btn"
+    :class="{ 'btn--sm': small, 'is-active': copied }"
     :disabled="!text"
     @click="copy"
   >

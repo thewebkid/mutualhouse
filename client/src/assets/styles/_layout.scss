@@ -1,4 +1,5 @@
 @use 'media' as *;
+@use 'tokens' as *;
 
 // ===========================================================================
 // Porch (public pages)
@@ -14,15 +15,14 @@
   flex: 1;
 }
 
+// Solid, not frosted: the lintel over the door
 .porch-header {
   position: sticky;
   top: 0;
   z-index: 30;
   padding-top: var(--safe-top);
-  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
-  backdrop-filter: saturate(1.2) blur(10px);
-  -webkit-backdrop-filter: saturate(1.2) blur(10px);
-  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
 }
 
 .porch-bar {
@@ -50,14 +50,16 @@
   img {
     width: 2rem;
     height: 2rem;
-    border-radius: 0.5rem;
+    border-radius: 0.4rem;
   }
 
   span {
     font-family: var(--font-serif);
     font-size-adjust: none;
-    font-size: 1.375rem;
-    font-weight: 600;
+    font-variation-settings: 'SOFT' 100;
+    font-size: 1.35rem;
+    font-weight: 620;
+    letter-spacing: -0.01em;
     white-space: nowrap;
   }
 
@@ -82,21 +84,22 @@
   align-items: center;
   gap: var(--space-1);
 
+  // Plain text links with a clay threshold under the current one
   a {
     padding: 0.4rem 0.7rem;
     font-size: 0.9375rem;
     font-weight: 500;
     color: var(--text-muted);
-    border-radius: var(--radius-pill);
     white-space: nowrap;
+    border-bottom: 2px solid transparent;
 
     &:hover {
       color: var(--text-heading);
     }
 
     &.router-link-exact-active {
-      color: var(--primary);
-      background: var(--primary-soft);
+      color: var(--text-heading);
+      border-bottom-color: var(--primary);
     }
   }
 
@@ -114,11 +117,12 @@
   }
 }
 
+// The footer is part of the dark wall, same as the studio rail
 .porch-footer {
+  @include hearth;
   padding: var(--space-7) 0 calc(var(--space-6) + var(--safe-bottom));
-  border-top: 1px solid var(--border-light);
-  background: var(--bg-elevated);
-  font-size: 0.875rem;
+  background: var(--bg);
+  font-size: 0.9375rem;
   color: var(--text-muted);
 }
 
@@ -132,11 +136,10 @@
 
   h2 {
     font-family: var(--font-sans);
-    font-size: 0.75rem;
+    font-size: 0.9375rem;
     font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-muted);
+    letter-spacing: 0;
+    color: var(--text-heading);
     margin: 0 0 var(--space-2);
   }
 
@@ -174,43 +177,109 @@
   max-width: calc(var(--measure) + 5rem);
 }
 
+// Left-aligned: the house speaks to you, it does not address a crowd.
+// With a `.porch-hero-art` sibling it becomes two columns on desktop.
 .porch-hero {
-  padding: clamp(4rem, 10vw, 6.5rem) 0 clamp(3.5rem, 8vw, 5.5rem);
-  text-align: center;
-  background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
-}
+  padding: clamp(3rem, 8vw, 5.5rem) 0 clamp(2.5rem, 6vw, 4rem);
+  border-bottom: 1px solid var(--border);
 
-.porch-hero {
   h1 {
-    max-width: 48rem;
-    margin: 0 auto var(--space-5);
-    font-style: italic;
-    font-size: clamp(2rem, 5vw, 3.1rem);
-    line-height: 1.4;
+    max-width: 22ch;
+    margin: 0 0 var(--space-5);
+    font-size: clamp(2rem, 4.6vw, 3rem);
+    line-height: 1.15;
   }
 
   .prose {
-    max-width: 40rem;
-    margin: 0 auto;
+    max-width: 38rem;
     color: var(--text-muted);
   }
 
   .action-row {
-    justify-content: center;
     margin-top: var(--space-6);
   }
 }
 
-.interlude {
-  padding: clamp(3rem, 7vw, 4.5rem) 0;
-  text-align: center;
+.porch-hero-grid {
+  display: grid;
+  gap: var(--space-7);
+  align-items: end;
+
+  @include desktop {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+}
+
+// A row of doorways in different signature hues, bottom-aligned like a street.
+.arch-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  height: clamp(9rem, 22vw, 15rem);
+  padding-bottom: var(--space-3);
+  border-bottom: 3px solid var(--text-heading);
+
+  @include desktop {
+    height: 18rem;
+  }
+}
+
+.arch {
+  position: relative;
+  flex: 1;
+  height: var(--h, 100%);
+  background: color-mix(in srgb, var(--sig) 22%, var(--surface));
+  border: 2px solid var(--sig);
+  border-bottom: 0;
+  border-radius: var(--radius-arch);
+  // sink the feet onto the ground line, not over it
+  margin-bottom: calc(-1 * var(--space-3));
+
+  // the knob
+  &::after {
+    content: '';
+    position: absolute;
+    right: 18%;
+    top: 58%;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--sig);
+  }
+}
+
+// Full-bleed colour blocks that break up the porch
+.band {
+  padding: clamp(3rem, 7vw, 5rem) 0;
+  background: var(--band-bg);
+  color: #f3f5ee;
+
+  .serif-quote {
+    max-width: 30ch;
+    color: #f7f9f3;
+  }
 
   .serif-quote + .serif-quote {
-    margin-top: var(--space-2);
+    margin-top: var(--space-4);
+    color: #f3b898;
   }
 
   .meta {
     margin-top: var(--space-4);
+    color: rgba(243, 245, 238, 0.75);
+  }
+}
+
+.band--alt {
+  background: var(--band-alt-bg);
+  color: #fff6ec;
+
+  .serif-quote {
+    color: #fff9f2;
+  }
+
+  .serif-quote + .serif-quote {
+    color: #ffd9c2;
   }
 }
 
@@ -307,8 +376,7 @@
 
 .section-head {
   max-width: var(--measure);
-  margin: 0 auto var(--space-6);
-  text-align: center;
+  margin: 0 0 var(--space-6);
 }
 
 // Centered single column for auth / formation / consent screens
@@ -457,13 +525,14 @@
     position: sticky;
     top: 0;
     z-index: 30;
+    @include hearth;
     display: flex;
     align-items: center;
     gap: var(--space-2);
     min-height: calc(var(--topbar-height) + var(--safe-top));
     padding: var(--safe-top) var(--space-2) 0;
-    background: var(--bg-elevated);
-    border-bottom: 1px solid var(--border-light);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
   }
 }
 
@@ -477,8 +546,9 @@
   strong {
     font-family: var(--font-serif);
     font-size-adjust: none;
+    font-variation-settings: 'SOFT' 100;
     font-size: 1.25rem;
-    font-weight: 600;
+    font-weight: 620;
     color: var(--text-heading);
     white-space: nowrap;
     overflow: hidden;
@@ -494,12 +564,13 @@
   }
 }
 
+// The hallway: always the dark wall, in light and night alike
 .rail {
+  @include hearth;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg-elevated);
-  border-right: 1px solid var(--border-light);
+  background: var(--bg);
   overflow-y: auto;
   overscroll-behavior: contain;
 

@@ -64,7 +64,7 @@ async function accept() {
           <h1>This door isn't open</h1>
           <p class="form-error" role="alert">{{ error }}</p>
           <div class="action-row">
-            <RouterLink to="/" class="pill">Return to the porch</RouterLink>
+            <RouterLink to="/" class="btn">Return to the porch</RouterLink>
           </div>
         </section>
 
@@ -72,8 +72,8 @@ async function accept() {
           <p class="eyebrow">You are invited</p>
           <h1>{{ houseName }}</h1>
           <div class="cluster">
-            <span class="badge badge--teal">{{ roleLabel }}</span>
-            <span v-if="house.coordinates" class="badge badge--gold">Locality {{ house.coordinates }}</span>
+            <span class="badge badge--primary">{{ roleLabel }}</span>
+            <span v-if="house.coordinates" class="badge badge--accent">Locality {{ house.coordinates }}</span>
           </div>
           <p v-if="house.purpose" class="prose">{{ house.purpose }}</p>
           <p class="muted">
@@ -85,13 +85,13 @@ async function accept() {
 
           <div class="action-row">
             <template v-if="globalState.currentUser">
-              <button type="button" class="pill pill--primary" :disabled="accepting" @click="accept">
+              <button type="button" class="btn btn--primary" :disabled="accepting" @click="accept">
                 {{ accepting ? 'Entering…' : 'Accept & enter the house' }}
               </button>
               <span class="meta">as {{ globalState.currentUser.email }}</span>
             </template>
             <template v-else>
-              <RouterLink :to="signInTarget" class="pill pill--primary">Sign in to accept</RouterLink>
+              <RouterLink :to="signInTarget" class="btn btn--primary">Sign in to accept</RouterLink>
               <span class="meta">You'll return here after signing in.</span>
             </template>
           </div>

@@ -81,11 +81,13 @@ Before locking this design, we ran three adversarial architecture reviews with G
 - **Decision (Inline Voice Notes):** Call `navigator.mediaDevices.getUserMedia({ audio: true })` synchronously inside the pointer/click handler before any `await`. Detect MIME preferring `audio/mp4` whenever Safari/WebKit or `audio/mp4` is primary (avoiding Safari 18+'s buggy `audio/webm` duration metadata) and `audio/webm;codecs=opus` on Chromium/Firefox. Use local `AudioContext` + `AnalyserNode` only on the live `MediaStream` during capture for a quiet input level bar, and synchronously stop tracks on `visibilitychange === 'hidden'`.
 - **Decision (2-Occupant Room Calls):** Store active calls in `room_call_sessions` (`unique (room_id) where status in ('ringing', 'active')`). Server assigns deterministic `polite = (selfInhabitantId > peerInhabitantId)` for WebRTC Perfect Negotiation glare recovery and mints short-lived Cloudflare TURN credentials (`turns:443`, stripping port `53` URLs). Instead of flooding serverless endpoints with 50 trickle-ICE HTTP requests, each browser waits for `iceGatheringState === 'complete'` (capped at 2,500ms) and posts **one** gathered SDP (`POST /api/rooms/:id/call/signal`), exchanged via the room event loop, with a 5s client heartbeat and 20s server staleness TTL + `navigator.sendBeacon` hangup on hide.
 
-### 7. Architectural Tone & Shared Styles (`coherence` Heritage)
-- **Decision:** Carry `.arch-docs/styles.md` and `serif-sizing.mdc` principles directly into `client/src/assets/styles/`:
-  - Structural class names (`room-shell`, `turn-row`, `seal-banner`, `receipt-drawer`, `presence-dot`) — never essay- or house-specific class names.
-  - Body chrome & controls in sans (`1rem`); spoken turns, episode narratives, living summaries, and constitutions in warm readable serif (`>= 1.2rem`, `line-height: 1.8`).
-  - Warm paper/stone light mode and deep hearth charcoal dark mode; zero gradients, zero unread-badge anxiety, zero typing-indicator pressure.
+### 7. Shared Principles, Own Identity
+- **Decision:** Inherit the sibling sites' *principles* (structural class names, the serif floor, calm chrome), but give Mutual House its own personality: a lived-in house rather than an observatory (`coherenceacrossscales.org`) or a contemplative codex (`alignos.io`). The full system lives in `.arch-docs/styles.md`; in `client/src/assets/styles/`:
+  - Structural class names (`room-shell`, `turn-row`, `seal-banner`, `receipt-drawer`, `presence-dot`, `btn`, `band`) — never essay-, house-, or colour-specific class names.
+  - Body chrome & controls in sans (Figtree, `1rem`); spoken turns, episode narratives, living summaries, and constitutions in a soft readable serif (Fraunces, `>= 1.2rem`, `line-height: 1.75–1.85`).
+  - Sage limewash light mode, deep garden-green dark mode, a clay primary and a pine accent for what is held (seals, privacy). No teal, gold, parchment or indigo, and no shared faces with the siblings.
+  - Per-inhabitant signature hues (derived client-side from the inhabitant id) with kind told by shape (round human, doorway AI), so colour never encodes rank.
+  - Zero gradients, zero unread-badge anxiety, zero typing-indicator pressure.
 
 ## Domain Model & Workspace Map
 

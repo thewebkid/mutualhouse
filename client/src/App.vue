@@ -4,7 +4,7 @@ import { RouterView } from 'vue-router';
 import { globalState } from './lib/state.js';
 import AppIcon from './components/AppIcon.vue';
 
-const THEME_COLORS = { light: '#f8f6f3', dark: '#1a1f2e' };
+const THEME_COLORS = { light: '#eff1e9', dark: '#121814' };
 
 watch(
   () => globalState.ui.theme,

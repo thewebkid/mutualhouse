@@ -132,7 +132,7 @@ function openQuickMemory() {
         </div>
         <div v-else class="stack">
           <p class="serif-line">This house couldn't be opened.</p>
-          <RouterLink to="/houses" class="pill">Your houses</RouterLink>
+          <RouterLink to="/houses" class="btn">Your houses</RouterLink>
         </div>
       </div>
 

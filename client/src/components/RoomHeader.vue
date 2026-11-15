@@ -78,7 +78,7 @@ function joinCall() {
       >
         <option v-for="(label, mode) in ROUTING_LABELS" :key="mode" :value="mode">{{ label }}</option>
       </select>
-      <span v-else class="badge badge--teal">{{ ROUTING_LABELS[room.routingMode] ?? room.routingMode }}</span>
+      <span v-else class="badge badge--primary">{{ ROUTING_LABELS[room.routingMode] ?? room.routingMode }}</span>
 
       <span v-if="room.routingMode === 'authorized_auto'" class="badge" title="Consecutive AI turns before a human must speak">
         {{ room.consecutiveAiTurns }}/{{ room.autoTurnCap }} auto
@@ -87,7 +87,7 @@ function joinCall() {
       <button
         v-if="canSteer"
         type="button"
-        class="pill pill--sm"
+        class="btn btn--sm"
         :class="{ 'is-active': room.paused }"
         :aria-pressed="room.paused"
         :disabled="busy === 'pause'"
@@ -97,7 +97,7 @@ function joinCall() {
         <AppIcon :name="room.paused ? 'play' : 'pause'" />
         {{ room.paused ? 'Paused' : 'Pause' }}
       </button>
-      <span v-else-if="room.paused" class="badge badge--gold">Paused</span>
+      <span v-else-if="room.paused" class="badge badge--accent">Paused</span>
 
       <button
         v-if="hasAi"
@@ -137,7 +137,7 @@ function joinCall() {
       <button
         v-if="!inCallHere"
         type="button"
-        class="pill pill--sm"
+        class="btn btn--sm"
         :disabled="globalState.call.status === 'joining'"
         @click="joinCall"
       >

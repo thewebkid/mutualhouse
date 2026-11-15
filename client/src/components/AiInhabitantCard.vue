@@ -118,8 +118,8 @@ function saveByok() {
         </p>
       </div>
       <div class="cluster">
-        <span class="badge badge--gold">{{ inhabitant.provider }}</span>
-        <span class="badge badge--teal">{{ DOOR_LABELS[inhabitant.doorType] ?? inhabitant.doorType }}</span>
+        <span class="badge badge--accent">{{ inhabitant.provider }}</span>
+        <span class="badge badge--primary">{{ DOOR_LABELS[inhabitant.doorType] ?? inhabitant.doorType }}</span>
       </div>
     </header>
 
@@ -152,7 +152,7 @@ function saveByok() {
       </ul>
       <p v-else class="field-hint">No active runner keys.</p>
       <div v-if="canManage">
-        <button type="button" class="pill pill--sm" :disabled="busy === 'mint'" @click="mintKey">
+        <button type="button" class="btn btn--sm" :disabled="busy === 'mint'" @click="mintKey">
           <AppIcon name="key" /> {{ busy === 'mint' ? 'Minting…' : 'Mint runner key' }}
         </button>
       </div>
@@ -172,7 +172,7 @@ function saveByok() {
               min="1"
               :disabled="!canManage"
             />
-            <button type="button" class="pill pill--sm" :disabled="!canManage" @click="nextArrival">Next arrival</button>
+            <button type="button" class="btn btn--sm" :disabled="!canManage" @click="nextArrival">Next arrival</button>
           </div>
         </div>
         <div class="field field--full">
@@ -187,7 +187,7 @@ function saveByok() {
           ></textarea>
         </div>
         <div v-if="canManage" class="action-row action-row--end field--full">
-          <button type="submit" class="pill pill--sm pill--primary" :disabled="busy === 'arrival'">Save arrival record</button>
+          <button type="submit" class="btn btn--sm btn--primary" :disabled="busy === 'arrival'">Save arrival record</button>
         </div>
       </form>
     </details>
@@ -229,7 +229,7 @@ function saveByok() {
           ></textarea>
         </div>
         <div class="action-row action-row--end field--full">
-          <button type="submit" class="pill pill--sm pill--primary" :disabled="busy === 'byok'">Save BYOK credentials</button>
+          <button type="submit" class="btn btn--sm btn--primary" :disabled="busy === 'byok'">Save BYOK credentials</button>
         </div>
       </form>
     </details>

@@ -53,23 +53,23 @@ export function buildMcpRoomCardHtml({ house, room, inhabitant }) {
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root {
-    --bg: #f8f6f3;
-    --surface: #fffdf9;
-    --border: #e4dfd6;
-    --text: #3d3632;
-    --muted: #857b6d;
-    --teal: #3d6567;
-    --gold: #a68521;
+    --bg: #eff1e9;
+    --surface: #fbfcf8;
+    --border: #d3d9c8;
+    --text: #222b25;
+    --muted: #5c6a5f;
+    --clay: #a9461f;
+    --pine: #234f39;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #1a1f2e;
-      --surface: #252a3d;
-      --border: #3a4156;
-      --text: #e8e4df;
-      --muted: #9a9590;
-      --teal: #8ec9cb;
-      --gold: #e5c254;
+      --bg: #121814;
+      --surface: #1c2620;
+      --border: #2f3d34;
+      --text: #e4eadf;
+      --muted: #9aa99d;
+      --clay: #e6936a;
+      --pine: #8fd0a9;
     }
   }
   body {
@@ -94,13 +94,13 @@ export function buildMcpRoomCardHtml({ house, room, inhabitant }) {
     padding-bottom: 8px;
     margin-bottom: 10px;
   }
-  .title { font-weight: 600; color: var(--teal); }
-  .badge { font-size: 12px; color: var(--gold); }
+  .title { font-weight: 600; color: var(--clay); }
+  .badge { font-size: 12px; color: var(--pine); }
   .turn { padding: 8px 0; border-bottom: 1px solid var(--border); }
   .turn:last-child { border-bottom: none; }
   .meta { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
   .prose { font-family: Georgia, serif; font-size: 16.5px; line-height: 1.6; white-space: pre-wrap; }
-  .seal { margin-top: 8px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--gold); font-size: 12px; color: var(--gold); }
+  .seal { margin-top: 8px; padding: 6px 10px; border-radius: 4px; border: 1px dashed var(--pine); font-size: 12px; color: var(--pine); }
 </style>
 </head>
 <body>

@@ -90,7 +90,7 @@ async function usePasskey() {
             <h1>That link didn't open</h1>
             <p class="form-error">{{ error }}</p>
             <div class="action-row">
-              <RouterLink :to="{ name: 'sign-in', query: { redirect: redirectTarget } }" class="pill pill--primary">
+              <RouterLink :to="{ name: 'sign-in', query: { redirect: redirectTarget } }" class="btn btn--primary">
                 Request a new link
               </RouterLink>
             </div>
@@ -102,7 +102,7 @@ async function usePasskey() {
           <h1>You're already inside</h1>
           <p class="muted">Signed in as {{ globalState.currentUser.email }}.</p>
           <div class="action-row">
-            <RouterLink :to="redirectTarget" class="pill pill--primary">Continue</RouterLink>
+            <RouterLink :to="redirectTarget" class="btn btn--primary">Continue</RouterLink>
           </div>
         </section>
 
@@ -149,14 +149,14 @@ async function usePasskey() {
               />
             </div>
             <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-            <button type="submit" class="pill pill--primary pill--block" :disabled="sending || !email">
+            <button type="submit" class="btn btn--primary btn--block" :disabled="sending || !email">
               {{ sending ? 'Sending…' : 'Email me a sign-in link' }}
             </button>
           </form>
 
           <template v-if="passkeySupported">
             <p class="divider-label">or</p>
-            <button type="button" class="pill pill--block" :disabled="passkeyBusy" @click="usePasskey">
+            <button type="button" class="btn btn--block" :disabled="passkeyBusy" @click="usePasskey">
               <AppIcon name="key" />
               {{ passkeyBusy ? 'Waiting for your passkey…' : 'Sign in with a passkey' }}
             </button>

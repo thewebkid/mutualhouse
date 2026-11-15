@@ -133,7 +133,7 @@ async function submit() {
 
             <div class="action-row action-row--end field--full">
               <RouterLink to="/houses" class="quiet-btn">Cancel</RouterLink>
-              <button type="submit" class="pill pill--primary" :disabled="!canSubmit">
+              <button type="submit" class="btn btn--primary" :disabled="!canSubmit">
                 {{ busy ? 'Forming…' : 'Form this house' }}
               </button>
             </div>

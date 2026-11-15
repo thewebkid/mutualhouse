@@ -229,8 +229,8 @@ const spaces = [
               </blockquote>
             </div>
             <div class="action-row">
-              <RouterLink to="/houses/new" class="pill pill--primary">Form a house</RouterLink>
-              <RouterLink to="/compact" class="pill">Read the Lattice Compact</RouterLink>
+              <RouterLink to="/houses/new" class="btn btn--primary">Form a house</RouterLink>
+              <RouterLink to="/compact" class="btn">Read the Lattice Compact</RouterLink>
             </div>
           </section>
         </article>

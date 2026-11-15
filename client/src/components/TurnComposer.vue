@@ -279,7 +279,7 @@ function excerpt(text = '') {
         </button>
         <button
           type="button"
-          class="pill pill--sm pill--primary"
+          class="btn btn--sm btn--primary"
           :disabled="voice.uploading"
           @click="finishRecording"
         >
@@ -349,7 +349,7 @@ function excerpt(text = '') {
           <select id="composer-kind" v-model="kind" class="field-control field-control--sm kind-select">
             <option v-for="k in KINDS" :key="k" :value="k">{{ k === 'turn' ? 'Turn' : k[0].toUpperCase() + k.slice(1) }}</option>
           </select>
-          <span v-if="sealSummary" class="badge badge--gold hide-phone">{{ sealSummary }}</span>
+          <span v-if="sealSummary" class="badge badge--accent hide-phone">{{ sealSummary }}</span>
 
           <div class="composer-send">
             <span class="meta hide-phone">Ctrl ↵</span>
@@ -363,7 +363,7 @@ function excerpt(text = '') {
             >
               <AppIcon name="pulse" />
             </button>
-            <button type="button" class="pill pill--sm pill--primary" :disabled="!canSend" @click="send">
+            <button type="button" class="btn btn--sm btn--primary" :disabled="!canSend" @click="send">
               Send <AppIcon name="send" />
             </button>
           </div>

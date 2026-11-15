@@ -121,8 +121,8 @@ export default defineConfig({
         name: 'The Mutual House',
         short_name: 'Mutual House',
         description: 'A household-scale sanctuary for differentiated human and AI signatures.',
-        theme_color: '#f8f6f3',
-        background_color: '#f8f6f3',
+        theme_color: '#eff1e9',
+        background_color: '#eff1e9',
         display: 'standalone',
         start_url: '/',
         icons: [

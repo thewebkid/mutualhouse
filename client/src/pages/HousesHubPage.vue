@@ -59,8 +59,8 @@ async function signOut() {
               class="card"
             >
               <div class="row row--between">
-                <span class="badge badge--teal">{{ h.roleLabel || 'Inhabitant' }}</span>
-                <span v-if="h.coordinates" class="badge badge--gold">Locality {{ h.coordinates }}</span>
+                <span class="badge badge--primary">{{ h.roleLabel || 'Inhabitant' }}</span>
+                <span v-if="h.coordinates" class="badge badge--accent">Locality {{ h.coordinates }}</span>
               </div>
               <h2 class="card-title">{{ h.name }}</h2>
               <p class="card-text">{{ h.purpose || 'Purpose not yet written.' }}</p>
@@ -87,7 +87,7 @@ async function signOut() {
                   }}
                 </p>
               </div>
-              <button type="button" class="pill" :disabled="passkeyBusy" @click="addPasskey">
+              <button type="button" class="btn" :disabled="passkeyBusy" @click="addPasskey">
                 <AppIcon name="key" />
                 {{ passkeyBusy ? 'Waiting…' : user?.hasPasskey ? 'Add another passkey' : 'Register a passkey' }}
               </button>

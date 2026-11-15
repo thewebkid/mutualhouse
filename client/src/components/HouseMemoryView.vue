@@ -146,10 +146,10 @@ function roomSlug(id) {
         {{ episodes.length }} episode{{ episodes.length === 1 ? '' : 's' }} woven
       </p>
       <div v-if="canPropose" class="action-row">
-        <button type="button" class="pill pill--primary" @click="openEpisodeForm">
+        <button type="button" class="btn btn--primary" @click="openEpisodeForm">
           <AppIcon name="plus" /> Weave an episode
         </button>
-        <button type="button" class="pill" @click="openSummaryForm">
+        <button type="button" class="btn" @click="openSummaryForm">
           {{ draft ? `Amend draft v${draft.version}` : 'Draft a Living Summary' }}
         </button>
       </div>
@@ -194,7 +194,7 @@ function roomSlug(id) {
       </div>
       <div class="action-row action-row--end">
         <button type="button" class="quiet-btn" @click="mode = null">Cancel</button>
-        <button type="submit" class="pill pill--primary" :disabled="busy === 'episode'">
+        <button type="submit" class="btn btn--primary" :disabled="busy === 'episode'">
           {{ busy === 'episode' ? 'Weaving…' : 'Weave into House Memory' }}
         </button>
       </div>
@@ -213,7 +213,7 @@ function roomSlug(id) {
       </div>
       <div class="action-row action-row--end">
         <button type="button" class="quiet-btn" @click="mode = null">Cancel</button>
-        <button type="submit" class="pill pill--primary" :disabled="busy === 'summary'">
+        <button type="submit" class="btn btn--primary" :disabled="busy === 'summary'">
           {{ busy === 'summary' ? 'Saving…' : 'Save draft' }}
         </button>
       </div>
@@ -223,7 +223,7 @@ function roomSlug(id) {
     <section v-if="draft" class="panel panel--accent" aria-labelledby="draft-heading">
       <div class="panel-head">
         <h2 id="draft-heading">Living Summary v{{ draft.version }}</h2>
-        <span class="badge badge--gold">{{ draft.status }}</span>
+        <span class="badge badge--accent">{{ draft.status }}</span>
       </div>
       <p class="meta">
         Drafted by {{ nameOf(draft.draftedByInhabitantId) }}
@@ -241,13 +241,13 @@ function roomSlug(id) {
         <button
           v-if="canConfirm"
           type="button"
-          class="pill pill--primary"
+          class="btn btn--primary"
           :disabled="busy === 'confirm'"
           @click="confirmDraft"
         >
           {{ busy === 'confirm' ? 'Confirming…' : `Confirm Living Summary v${draft.version}` }}
         </button>
-        <button v-if="canPropose" type="button" class="pill" @click="openSummaryForm">Amend</button>
+        <button v-if="canPropose" type="button" class="btn" @click="openSummaryForm">Amend</button>
         <span v-if="!canConfirm" class="meta">A human inhabitant confirms what future arrivals receive.</span>
       </div>
     </section>

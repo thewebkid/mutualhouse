@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import { signatureStyle } from '../lib/signature.js';
 
 const props = defineProps({
   inhabitant: { type: Object, default: null },
@@ -19,6 +20,7 @@ const title = computed(() => {
   <span
     class="monogram"
     :class="{ 'monogram--ai': isAi, 'monogram--sm': small }"
+    :style="signatureStyle(inhabitant)"
     :title="title"
     aria-hidden="true"
   >{{ initials }}</span>

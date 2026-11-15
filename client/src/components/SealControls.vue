@@ -82,7 +82,7 @@ async function release(seal) {
     <button
       v-if="canRelease"
       type="button"
-      class="pill pill--sm pill--gold"
+      class="btn btn--sm btn--accent"
       :disabled="releasing === seal.id"
       @click="release(seal)"
     >

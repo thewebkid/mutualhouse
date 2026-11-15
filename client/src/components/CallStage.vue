@@ -125,7 +125,7 @@ async function share() {
       >
         <AppIcon name="screen" />
       </button>
-      <button type="button" class="pill pill--sm pill--danger" @click="leaveActiveRoomCall">
+      <button type="button" class="btn btn--sm btn--danger" @click="leaveActiveRoomCall">
         <AppIcon name="phone-off" /> Leave
       </button>
     </div>
@@ -137,7 +137,7 @@ async function share() {
     <div class="call-bar">
       <span class="presence-dot presence-dot--participating"></span>
       <span class="label row-grow">You're in a call in another room.</span>
-      <button type="button" class="pill pill--sm pill--danger" @click="leaveActiveRoomCall">Leave call</button>
+      <button type="button" class="btn btn--sm btn--danger" @click="leaveActiveRoomCall">Leave call</button>
     </div>
   </section>
 
@@ -147,7 +147,7 @@ async function share() {
       <span class="label row-grow">
         {{ roomIsFull ? 'A call is in progress in this room.' : `${otherOccupant} has opened a call in this room.` }}
       </span>
-      <button v-if="!roomIsFull" type="button" class="pill pill--sm pill--primary" @click="join">
+      <button v-if="!roomIsFull" type="button" class="btn btn--sm btn--primary" @click="join">
         <AppIcon name="video" /> Join
       </button>
     </div>

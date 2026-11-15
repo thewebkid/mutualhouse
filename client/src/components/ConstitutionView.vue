@@ -157,7 +157,7 @@ const diffStats = computed(() => ({
           <dd>{{ namesOf(active.witnessedByAiIds) || 'No AI witnesses yet' }}</dd>
         </dl>
         <div v-if="canRatifyRole && !hasRatified(active)" class="action-row">
-          <button type="button" class="pill pill--primary" :disabled="busy === `ratify-${active.id}`" @click="ratify(active)">
+          <button type="button" class="btn btn--primary" :disabled="busy === `ratify-${active.id}`" @click="ratify(active)">
             Add my ratification
           </button>
         </div>
@@ -166,7 +166,7 @@ const diffStats = computed(() => ({
         <p class="serif-line">Blank by default.</p>
         <p class="meta">The house writes its constitution when it is ready — or never. Nothing is inherited.</p>
         <div class="section-foot">
-          <button type="button" class="pill pill--primary" @click="openPropose">Propose a first draft</button>
+          <button type="button" class="btn btn--primary" @click="openPropose">Propose a first draft</button>
         </div>
       </div>
     </section>
@@ -175,7 +175,7 @@ const diffStats = computed(() => ({
     <section v-else-if="tab === 'draft' && draft" class="panel panel--accent" role="tabpanel">
       <div class="panel-head">
         <h2>{{ draft.title }} · v{{ draft.version }}</h2>
-        <span class="badge badge--gold">draft</span>
+        <span class="badge badge--accent">draft</span>
       </div>
       <p class="meta">
         Proposed by {{ namesOf([draft.proposedByInhabitantId]) }} · {{ formatShortDate(draft.createdAt) }}
@@ -186,13 +186,13 @@ const diffStats = computed(() => ({
         <button
           v-if="canRatifyRole"
           type="button"
-          class="pill pill--primary"
+          class="btn btn--primary"
           :disabled="busy === `ratify-${draft.id}`"
           @click="ratify(draft)"
         >
           {{ busy === `ratify-${draft.id}` ? 'Ratifying…' : 'Ratify Constitution' }}
         </button>
-        <button v-if="active" type="button" class="pill" @click="tab = 'compare'">Compare with v{{ active.version }}</button>
+        <button v-if="active" type="button" class="btn" @click="tab = 'compare'">Compare with v{{ active.version }}</button>
         <span v-if="!canRatifyRole" class="meta">Only human inhabitants ratify.</span>
       </div>
     </section>
@@ -262,7 +262,7 @@ const diffStats = computed(() => ({
       </div>
       <div class="action-row action-row--end">
         <button type="button" class="quiet-btn" @click="tab = draft ? 'draft' : 'current'">Cancel</button>
-        <button type="submit" class="pill pill--primary" :disabled="busy === 'propose' || !form.body.trim()">
+        <button type="submit" class="btn btn--primary" :disabled="busy === 'propose' || !form.body.trim()">
           {{ busy === 'propose' ? 'Proposing…' : 'Propose draft' }}
         </button>
       </div>
@@ -275,7 +275,7 @@ const diffStats = computed(() => ({
       </div>
       <ol v-else class="list-plain stack">
         <li v-for="c in history" :key="c.id" class="row row--wrap">
-          <span class="badge" :class="c.isRatified ? 'badge--ok' : 'badge--gold'">v{{ c.version }} · {{ c.status }}</span>
+          <span class="badge" :class="c.isRatified ? 'badge--ok' : 'badge--accent'">v{{ c.version }} · {{ c.status }}</span>
           <span class="row-grow">
             <strong>{{ c.title }}</strong>
             <span class="meta"> · proposed by {{ namesOf([c.proposedByInhabitantId]) }} · {{ formatShortDate(c.createdAt) }}</span>

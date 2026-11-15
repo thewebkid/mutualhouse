@@ -89,7 +89,7 @@ function pad(n) {
     </div>
     <h2 class="rail-title">
       {{ house.name }}
-      <span v-if="house.coordinates" class="badge badge--gold">{{ house.coordinates }}</span>
+      <span v-if="house.coordinates" class="badge badge--accent">{{ house.coordinates }}</span>
     </h2>
     <label v-if="otherHouses.length" class="field">
       <span class="visually-hidden">Switch house</span>
@@ -144,7 +144,7 @@ function pad(n) {
           <option value="private">Private</option>
           <option value="common">Common</option>
         </select>
-        <button type="submit" class="pill pill--sm pill--primary" :disabled="creating || !newRoomName.trim()">
+        <button type="submit" class="btn btn--sm btn--primary" :disabled="creating || !newRoomName.trim()">
           {{ creating ? '…' : 'Create' }}
         </button>
       </div>

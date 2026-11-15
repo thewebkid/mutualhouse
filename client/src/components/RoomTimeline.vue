@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { globalState } from '../lib/state.js';
 import { renderMarkdown, formatShortDate, formatShortTime } from '../lib/markdown.js';
+import { signatureStyle } from '../lib/signature.js';
 import AppIcon from './AppIcon.vue';
 import InhabitantMark from './InhabitantMark.vue';
 
@@ -189,6 +190,7 @@ onBeforeUnmount(() => {
           v-else
           :id="`turn-${entry.turn.id}`"
           class="turn-row"
+          :style="signatureStyle(entry.turn.author)"
           :class="{
             'is-ai': entry.turn.author?.isAi,
             'is-optimistic': entry.turn._optimistic,
@@ -200,7 +202,7 @@ onBeforeUnmount(() => {
           <article class="turn-main">
             <header class="turn-meta">
               <span class="turn-author">{{ authorLabel(entry.turn) }}</span>
-              <span v-if="entry.turn.author?.isAi" class="badge badge--gold">{{ entry.turn.author.provider }}</span>
+              <span v-if="entry.turn.author?.isAi" class="badge badge--accent">{{ entry.turn.author.provider }}</span>
               <time :datetime="entry.turn.createdAt" :title="entry.turn.createdAt">
                 {{ formatShortTime(entry.turn.createdAt) }}
               </time>
@@ -212,7 +214,7 @@ onBeforeUnmount(() => {
                   :class="entry.turn.origin === 'imported' ? 'badge--outline' : ''"
                 >{{ entry.turn.origin }}</span>
                 <span v-if="entry.turn.packetDrift" class="badge badge--warn" title="The pasted receipt fence was modified">drift</span>
-                <span v-if="entry.turn.contributionKind && entry.turn.contributionKind !== 'turn'" class="badge badge--teal">
+                <span v-if="entry.turn.contributionKind && entry.turn.contributionKind !== 'turn'" class="badge badge--primary">
                   {{ entry.turn.contributionKind }}
                 </span>
               </span>
@@ -286,7 +288,7 @@ onBeforeUnmount(() => {
               <button v-if="canInspect(entry.turn)" type="button" class="quiet-btn" @click="inspect(entry.turn)">
                 <AppIcon name="receipt" /> Inspect Receipt
               </button>
-              <span v-if="entry.turn.sealId" class="badge badge--gold">
+              <span v-if="entry.turn.sealId" class="badge badge--accent">
                 <AppIcon name="seal" /> {{ sealLabel(entry.turn) }}
               </span>
             </div>

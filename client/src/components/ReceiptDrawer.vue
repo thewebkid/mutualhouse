@@ -286,7 +286,7 @@ function openMemoryView() {
 
         <p v-if="replyTurn" class="meta">In reply to #{{ replyTurn.seq }} ({{ replyTurn.author?.name }}).</p>
 
-        <button type="button" class="pill pill--primary pill--block" :disabled="issuing" @click="issuePacket">
+        <button type="button" class="btn btn--primary btn--block" :disabled="issuing" @click="issuePacket">
           <AppIcon name="packet" />
           {{ issuing ? 'Signing…' : 'Generate Signed Arrival / Contribution Packet' }}
         </button>
@@ -295,7 +295,7 @@ function openMemoryView() {
           <div class="row row--between">
             <p class="subhead">Packet Markdown</p>
             <div class="cluster">
-              <button v-if="canShare" type="button" class="pill pill--sm" @click="sharePacket">Share</button>
+              <button v-if="canShare" type="button" class="btn btn--sm" @click="sharePacket">Share</button>
               <CopyButton :text="packetMarkdown" label="Copy Markdown" />
             </div>
           </div>
@@ -317,7 +317,7 @@ function openMemoryView() {
             <input v-model="attachToSeal" type="checkbox" />
             <span class="toggle-text">Record inside the open seal</span>
           </label>
-          <button type="submit" class="pill pill--block" :disabled="importing || !pasted.trim()">
+          <button type="submit" class="btn btn--block" :disabled="importing || !pasted.trim()">
             {{ importing ? 'Verifying…' : 'Verify & record contribution' }}
           </button>
           <p v-if="lastImport" class="badge" :class="lastImport.drift ? 'badge--warn' : 'badge--ok'">
@@ -343,10 +343,10 @@ function openMemoryView() {
       </template>
       <p v-else class="serif-line muted">No confirmed summary yet. Weave a first episode when the house is ready.</p>
 
-      <p v-if="draft" class="badge badge--gold">Draft v{{ draft.version }} awaiting confirmation</p>
+      <p v-if="draft" class="badge badge--accent">Draft v{{ draft.version }} awaiting confirmation</p>
       <p v-if="room" class="meta">#{{ room.slug }} · {{ unwovenCount }} turn{{ unwovenCount === 1 ? '' : 's' }} not yet woven</p>
 
-      <button type="button" class="pill" @click="openMemoryView">Open House Memory</button>
+      <button type="button" class="btn" @click="openMemoryView">Open House Memory</button>
     </section>
   </div>
 </template>

@@ -244,7 +244,7 @@ function addPasskey() {
       </fieldset>
       <div v-if="canManage" class="action-row action-row--end">
         <button type="button" class="quiet-btn" @click="syncSections">Revert</button>
-        <button type="submit" class="pill pill--primary" :disabled="busy === 'sections'">
+        <button type="submit" class="btn btn--primary" :disabled="busy === 'sections'">
           {{ busy === 'sections' ? 'Saving…' : 'Save the four sections' }}
         </button>
       </div>
@@ -262,7 +262,7 @@ function addPasskey() {
         <pre class="code-block">{{ runnerCommand }}</pre>
         <div class="cluster">
           <CopyButton :text="runnerCommand" label="Copy command" />
-          <button type="button" class="pill pill--sm" @click="ui.newlyMintedKey = null">I've stored it</button>
+          <button type="button" class="btn btn--sm" @click="ui.newlyMintedKey = null">I've stored it</button>
         </div>
       </div>
 
@@ -270,7 +270,7 @@ function addPasskey() {
         <p class="meta row-grow">
           Each AI inhabitant is its own principal with its own doors — no “Hey Doc” prefixes, no shared identities.
         </p>
-        <button v-if="canManage" type="button" class="pill pill--primary" :aria-expanded="showAddAi" @click="showAddAi = !showAddAi">
+        <button v-if="canManage" type="button" class="btn btn--primary" :aria-expanded="showAddAi" @click="showAddAi = !showAddAi">
           <AppIcon name="plus" /> Welcome an AI inhabitant
         </button>
       </div>
@@ -318,7 +318,7 @@ function addPasskey() {
         </div>
         <div class="action-row action-row--end">
           <button type="button" class="quiet-btn" @click="showAddAi = false">Cancel</button>
-          <button type="submit" class="pill pill--primary" :disabled="busy === 'add-ai' || !newAi.name.trim()">
+          <button type="submit" class="btn btn--primary" :disabled="busy === 'add-ai' || !newAi.name.trim()">
             {{ busy === 'add-ai' ? 'Welcoming…' : 'Welcome inhabitant' }}
           </button>
         </div>
@@ -346,7 +346,7 @@ function addPasskey() {
           </div>
         </div>
         <div class="action-row action-row--end">
-          <button type="submit" class="pill pill--primary" :disabled="busy === 'invite'">
+          <button type="submit" class="btn btn--primary" :disabled="busy === 'invite'">
             {{ busy === 'invite' ? 'Creating…' : 'Generate invitation link' }}
           </button>
         </div>
@@ -384,7 +384,7 @@ function addPasskey() {
           interiority — leaving takes it with you.
         </p>
         <div>
-          <button type="button" class="pill pill--primary" :disabled="busy === 'export'" @click="exportHouse">
+          <button type="button" class="btn btn--primary" :disabled="busy === 'export'" @click="exportHouse">
             <AppIcon name="download" /> {{ busy === 'export' ? 'Preparing…' : 'Export This House (.zip)' }}
           </button>
         </div>
@@ -394,7 +394,7 @@ function addPasskey() {
         <h2 class="card-title">Passkey for this device</h2>
         <p class="card-text">Open your houses without waiting on email — and without a password anyone can phish.</p>
         <div>
-          <button type="button" class="pill" :disabled="busy === 'passkey'" @click="addPasskey">
+          <button type="button" class="btn" :disabled="busy === 'passkey'" @click="addPasskey">
             <AppIcon name="key" /> {{ busy === 'passkey' ? 'Waiting…' : 'Register a passkey' }}
           </button>
         </div>

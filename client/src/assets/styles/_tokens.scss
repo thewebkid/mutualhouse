@@ -1,42 +1,40 @@
-// Palette borrowed from alignos.io (warm parchment, sacred teal, muted gold,
-// indigo-slate night) and expressed as runtime custom properties.
+// Mutual House palette: a lived-in house.
+//   limewash sage walls · clay door · pine for what is held (seals) · green-black ink
+//   night = the same house with the lamps on (deep garden green, never indigo or slate)
+// Deliberately shares no hue family with alignos.io (teal / gold / parchment / indigo)
+// or coherenceacrossscales.org (slate-blue / neutral grey).
 
-$teal-100: #e8f4f4;
-$teal-200: #c5e3e4;
-$teal-300: #8ec9cb;
-$teal-400: #5da3a5;
-$teal-500: #4a7c7e;
-$teal-600: #3d6567;
-$teal-700: #2f4f50;
-$teal-800: #233b3c;
+// Walls (sage limewash)
+$wall-50: #fbfcf8;
+$wall-100: #f6f7f1;
+$wall-200: #eff1e9;
+$wall-300: #e3e7da;
+$wall-400: #d3d9c8;
+$wall-500: #b3bba5;
+$wall-600: #5c6a5f;
+$wall-700: #3f4c43;
+$wall-800: #222b25;
+$wall-900: #141b16;
 
-$gold-100: #fdf8e8;
-$gold-200: #f9edc5;
-$gold-300: #f0d98a;
-$gold-400: #e5c254;
-$gold-600: #c9a227;
-$gold-700: #a68521;
+// Clay (the door you knock on: actions, links, "this room")
+$clay-300: #f1b392;
+$clay-400: #e6936a;
+$clay-600: #a9461f;
+$clay-700: #8b3716;
 
-$warm-50: #fdfcfa;
-$warm-100: #f8f6f3;
-$warm-200: #f0ede8;
-$warm-300: #e4dfd6;
-$warm-400: #cdc5b8;
-$warm-500: #a99f8f;
-$warm-600: #857b6d;
-$warm-700: #615851;
-$warm-800: #3d3632;
-$warm-900: #1f1b18;
-
-$dark-bg: #1a1f2e;
-$dark-surface: #252a3d;
-$dark-surface-elevated: #2d3348;
-$dark-border: #3a4156;
-$dark-border-light: #444c63;
+// Pine (what is held: seals, privacy, inside-by-default)
+$pine-300: #8fd0a9;
+$pine-400: #5fbf92;
+$pine-600: #2f6a4c;
+$pine-700: #234f39;
+$pine-800: #1f3128;
+$pine-900: #0e1410;
 
 :root {
-  --font-sans: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  // Fraunces: soft, slightly hand-cut serif for headings and everything spoken.
+  // Figtree: friendly, even sans for chrome. Neither sibling uses either face.
+  --font-sans: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
 
   --space-1: 0.25rem;
@@ -48,11 +46,14 @@ $dark-border-light: #444c63;
   --space-7: 3rem;
   --space-8: 4.5rem;
 
-  --radius-sm: 0.375rem;
-  --radius: 0.5rem;
-  --radius-lg: 0.75rem;
+  // Squarer than the sibling sites: a house is built from plaster and timber, not pebbles.
+  --radius-sm: 0.25rem;
+  --radius: 0.4rem;
+  --radius-lg: 0.65rem;
   --radius-xl: 1rem;
   --radius-pill: 50rem;
+  // The doorway: round top, near-square foot. Used for AI inhabitants and the porch skyline.
+  --radius-arch: 50rem 50rem 0.35rem 0.35rem;
 
   --rail-width: 272px;
   --drawer-width: 380px;
@@ -61,69 +62,140 @@ $dark-border-light: #444c63;
   --porch-width: 68rem;
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-  --duration: 0.24s;
+  --duration: 0.2s;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @mixin light-theme {
-  --bg: #{$warm-100};
-  --bg-elevated: #{$warm-50};
-  --surface: #ffffff;
-  --surface-hover: #{$warm-200};
-  --surface-sunken: #{$warm-200};
-  --reader-bg: #fffdf9;
-  --text: #{$warm-800};
-  --text-muted: #{$warm-600};
-  --text-heading: #{$warm-900};
-  --primary: #{$teal-500};
-  --primary-hover: #{$teal-600};
-  --primary-soft: rgba(74, 124, 126, 0.1);
-  --primary-ink: #ffffff;
-  --accent: #{$gold-600};
-  --accent-hover: #{$gold-700};
-  --accent-soft: rgba(201, 162, 39, 0.12);
-  --border: #{$warm-300};
-  --border-light: #{$warm-200};
-  --shadow: rgba(31, 27, 24, 0.08);
-  --shadow-lg: rgba(31, 27, 24, 0.14);
-  --overlay: rgba(31, 27, 24, 0.42);
-  --danger: #b5534f;
-  --danger-soft: rgba(181, 83, 79, 0.1);
-  --success: #4a9f7e;
-  --success-soft: rgba(74, 159, 126, 0.12);
-  --focus-ring: 0 0 0 3px rgba(74, 124, 126, 0.28);
+  --bg: #{$wall-200};
+  --bg-elevated: #{$wall-100};
+  --surface: #{$wall-50};
+  --surface-hover: #{$wall-300};
+  --surface-sunken: #{$wall-300};
+  --reader-bg: #{$wall-50};
+  --text: #{$wall-800};
+  --text-muted: #{$wall-600};
+  --text-heading: #{$wall-900};
+
+  --primary: #{$clay-600};
+  --primary-hover: #{$clay-700};
+  --primary-soft: rgba(169, 70, 31, 0.1);
+  --primary-ink: #fffaf4;
+  --accent: #{$pine-600};
+  --accent-hover: #{$pine-700};
+  --accent-text: #{$pine-700};
+  --accent-soft: rgba(47, 106, 76, 0.1);
+
+  --border: #{$wall-400};
+  --border-light: #e0e4d6;
+  --shadow: rgba(20, 32, 24, 0.07);
+  --shadow-lg: rgba(20, 32, 24, 0.18);
+  --overlay: rgba(20, 32, 24, 0.45);
+  --danger: #b3263f;
+  --danger-soft: rgba(179, 38, 63, 0.09);
+  --success: #2f7d57;
+  --success-soft: rgba(47, 125, 87, 0.11);
+  --focus-ring: 0 0 0 3px rgba(169, 70, 31, 0.28);
+
+  // Deep wall: the rail, the topbar and the porch footer are always dark
+  --hearth-bg: #{$pine-800};
+  --hearth-border: #34493d;
+  // Colour bands on the porch
+  --band-bg: #{$pine-700};
+  --band-alt-bg: #{$clay-600};
+
+  // Signature hues: one per inhabitant, assigned by hash. Equal weight, no ranking.
+  --sig-1: #c2562d;
+  --sig-2: #2f7d57;
+  --sig-3: #8a4b7a;
+  --sig-4: #3b63a6;
+  --sig-5: #c58a12;
+  --sig-6: #b23a5b;
+  --sig-7: #7a8a2e;
+  --sig-8: #6a5fb0;
+
   color-scheme: light;
 }
 
 @mixin dark-theme {
-  --bg: #{$dark-bg};
-  --bg-elevated: #{$dark-surface-elevated};
-  --surface: #{$dark-surface};
-  --surface-hover: #{$dark-surface-elevated};
-  --surface-sunken: #20253a;
-  --reader-bg: #{$dark-surface};
-  --text: #e8e4df;
-  --text-muted: #9a9590;
-  --text-heading: #f5f2ef;
-  --primary: #{$teal-400};
-  --primary-hover: #{$teal-300};
-  --primary-soft: rgba(93, 163, 165, 0.14);
-  --primary-ink: #{$dark-bg};
-  --accent: #{$gold-400};
-  --accent-hover: #{$gold-300};
-  --accent-soft: rgba(229, 194, 84, 0.12);
-  --border: #{$dark-border};
-  --border-light: #{$dark-border-light};
+  --bg: #121814;
+  --bg-elevated: #19211c;
+  --surface: #1c2620;
+  --surface-hover: #25312a;
+  --surface-sunken: #151d18;
+  --reader-bg: #161e19;
+  --text: #e4eadf;
+  --text-muted: #9aa99d;
+  --text-heading: #f4f7f0;
+
+  --primary: #{$clay-400};
+  --primary-hover: #{$clay-300};
+  --primary-soft: rgba(230, 147, 106, 0.14);
+  --primary-ink: #1a120d;
+  --accent: #{$pine-400};
+  --accent-hover: #{$pine-300};
+  --accent-text: #{$pine-300};
+  --accent-soft: rgba(95, 191, 146, 0.12);
+
+  --border: #2f3d34;
+  --border-light: #26322b;
   --shadow: rgba(0, 0, 0, 0.3);
-  --shadow-lg: rgba(0, 0, 0, 0.45);
-  --overlay: rgba(8, 10, 18, 0.62);
-  --danger: #d98a86;
-  --danger-soft: rgba(217, 138, 134, 0.12);
+  --shadow-lg: rgba(0, 0, 0, 0.5);
+  --overlay: rgba(6, 10, 8, 0.65);
+  --danger: #f08a9b;
+  --danger-soft: rgba(240, 138, 155, 0.12);
   --success: #7cc4a6;
   --success-soft: rgba(124, 196, 166, 0.12);
-  --focus-ring: 0 0 0 3px rgba(93, 163, 165, 0.35);
+  --focus-ring: 0 0 0 3px rgba(230, 147, 106, 0.38);
+
+  --hearth-bg: #{$pine-900};
+  --hearth-border: #1f2b23;
+  --band-bg: #1b3a2b;
+  --band-alt-bg: #8b3716;
+
+  --sig-1: #e5805a;
+  --sig-2: #5fbf92;
+  --sig-3: #c98bb8;
+  --sig-4: #7ea3e0;
+  --sig-5: #e2b04a;
+  --sig-6: #e1708f;
+  --sig-7: #b3c25a;
+  --sig-8: #a79ee0;
+
+  color-scheme: dark;
+}
+
+// Always-dark chrome (rail, topbar, footer). Re-points the shared tokens so every
+// control inside (buttons, fields, badges, links) restyles itself with no extra rules.
+@mixin hearth {
+  --bg: var(--hearth-bg);
+  --bg-elevated: var(--hearth-bg);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --surface-sunken: rgba(0, 0, 0, 0.22);
+  --text: #e6ece3;
+  --text-muted: #a6b5a9;
+  --text-heading: #f7f9f3;
+  --primary: #f0a67f;
+  --primary-hover: #f6c2a5;
+  --primary-soft: rgba(240, 166, 127, 0.16);
+  --primary-ink: #1a120d;
+  --accent: #8fd0a9;
+  --accent-hover: #b4e3c6;
+  --accent-text: #8fd0a9;
+  --accent-soft: rgba(143, 208, 169, 0.14);
+  --border: var(--hearth-border);
+  --border-light: var(--hearth-border);
+  --shadow: rgba(0, 0, 0, 0.3);
+  --focus-ring: 0 0 0 3px rgba(240, 166, 127, 0.4);
+  --danger: #f08a9b;
+  --danger-soft: rgba(240, 138, 155, 0.14);
+  --success: #8fd0a9;
+  --success-soft: rgba(143, 208, 169, 0.14);
+
+  color: var(--text);
   color-scheme: dark;
 }
 

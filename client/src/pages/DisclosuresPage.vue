@@ -182,7 +182,7 @@ const providers = [
               </p>
             </div>
             <div class="action-row">
-              <RouterLink to="/compact" class="pill">The Lattice Compact</RouterLink>
+              <RouterLink to="/compact" class="btn">The Lattice Compact</RouterLink>
               <RouterLink to="/orientation" class="quiet-link">Orientation</RouterLink>
             </div>
           </section>

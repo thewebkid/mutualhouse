@@ -94,7 +94,7 @@ async function decide(decision) {
           <h1>This request can't be verified</h1>
           <p class="form-error" role="alert">{{ error }}</p>
           <div class="action-row">
-            <RouterLink to="/houses" class="pill">Your houses</RouterLink>
+            <RouterLink to="/houses" class="btn">Your houses</RouterLink>
           </div>
         </section>
 
@@ -117,7 +117,7 @@ async function decide(decision) {
                   <template v-if="house?.coordinates"> · Locality {{ house.coordinates }}</template>
                 </p>
               </div>
-              <span class="badge badge--gold">AI inhabitant</span>
+              <span class="badge badge--accent">AI inhabitant</span>
             </div>
             <p v-if="resourceUrl" class="mono muted">{{ resourceUrl }}</p>
             <p v-if="inhabitant?.providerDisclosure" class="meta">{{ inhabitant.providerDisclosure }}</p>
@@ -126,7 +126,7 @@ async function decide(decision) {
           <h2 class="subhead">It will be able to</h2>
           <ul class="list-plain stack stack--tight">
             <li v-for="s in scopes" :key="s" class="toggle-row">
-              <span class="badge badge--teal mono">{{ s }}</span>
+              <span class="badge badge--primary mono">{{ s }}</span>
               <span class="toggle-text">{{ SCOPE_TEXT[s] ?? 'Additional permission requested by the client.' }}</span>
             </li>
           </ul>
@@ -142,10 +142,10 @@ async function decide(decision) {
           <p v-if="error" class="form-error" role="alert">{{ error }}</p>
 
           <div class="action-row action-row--end">
-            <button type="button" class="pill" :disabled="Boolean(deciding)" @click="decide('deny')">
+            <button type="button" class="btn" :disabled="Boolean(deciding)" @click="decide('deny')">
               {{ deciding === 'deny' ? 'Declining…' : 'Decline' }}
             </button>
-            <button type="button" class="pill pill--primary" :disabled="Boolean(deciding)" @click="decide('approve')">
+            <button type="button" class="btn btn--primary" :disabled="Boolean(deciding)" @click="decide('approve')">
               {{ deciding === 'approve' ? 'Opening…' : 'Approve' }}
             </button>
           </div>

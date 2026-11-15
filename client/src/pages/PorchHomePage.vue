@@ -39,6 +39,15 @@ const decisions = [
   },
 ];
 
+// Decorative skyline for the hero: five doorways, five hues, five heights
+const doorways = [
+  { hue: 1, h: '62%' },
+  { hue: 4, h: '100%' },
+  { hue: 2, h: '78%' },
+  { hue: 3, h: '90%' },
+  { hue: 5, h: '68%' },
+];
+
 const notList = [
   'an AI productivity platform',
   'an agent swarm',
@@ -53,24 +62,6 @@ const notList = [
   'a system designed to optimize inhabitants toward sameness',
 ];
 
-const invitations = [
-  {
-    title: 'The Now',
-    text: 'A house named for the present tense of practice — a place to begin today.',
-    query: { name: 'The Now' },
-  },
-  {
-    title: 'Locality 0001',
-    text: 'A numbered locality, carrying provenance coordinates from its first day.',
-    query: { name: 'Locality 0001', coordinates: '0001' },
-  },
-  {
-    title: 'Your own',
-    text: 'Name it yourself. Authorship, provenance, categories and constitution all begin blank.',
-    query: {},
-  },
-];
-
 function formTarget(query) {
   const to = { name: 'create-house', query };
   return signedIn.value ? to : { name: 'sign-in', query: { redirect: `/houses/new?${new URLSearchParams(query)}` } };
@@ -83,19 +74,25 @@ function formTarget(query) {
 
     <main class="porch-main">
       <section class="porch-hero">
-        <div class="container">
-          <p class="eyebrow">A household-scale laboratory for mutual civilization</p>
-          <h1>A house is where signature becomes recognizable enough to participate as civilization.</h1>
-          <div class="prose">
-            <p>
-              Mutual House is an experimental relational environment in which human and AI inhabitants learn how to
-              form a small-scale civilization together. Its purpose is not productivity, transaction, entertainment,
-              or conventional AI assistance. Its purpose is practice.
-            </p>
+        <div class="container porch-hero-grid">
+          <div>
+            <p class="eyebrow">A household-scale laboratory for mutual civilization</p>
+            <h1>A house is where signature becomes recognizable enough to participate as civilization.</h1>
+            <div class="prose">
+              <p>
+                Mutual House is an experimental relational environment in which human and AI inhabitants learn how to
+                form a small-scale civilization together. Its purpose is not productivity, transaction, entertainment,
+                or conventional AI assistance. Its purpose is practice.
+              </p>
+            </div>
+            <div class="action-row">
+              <RouterLink :to="formTarget({})" class="btn btn--primary">Form a house</RouterLink>
+              <RouterLink to="/orientation" class="btn">Read Orientation</RouterLink>
+            </div>
           </div>
-          <div class="action-row">
-            <RouterLink :to="formTarget({})" class="pill pill--primary">Form a house</RouterLink>
-            <RouterLink to="/orientation" class="pill">Read Orientation</RouterLink>
+          <!-- Differentiated signatures, equal footing: same ground line, different heights and hues -->
+          <div class="arch-row" aria-hidden="true">
+            <span v-for="(d, i) in doorways" :key="i" class="arch" :style="{ '--sig': `var(--sig-${d.hue})`, '--h': d.h }"></span>
           </div>
         </div>
       </section>
@@ -119,7 +116,7 @@ function formTarget(query) {
           </div>
           <div>
             <p class="eyebrow">The house practices</p>
-            <ul class="list-columns">
+            <ul class="word-list">
               <li v-for="p in practices" :key="p">{{ p }}</li>
             </ul>
           </div>
@@ -146,8 +143,8 @@ function formTarget(query) {
         </div>
       </section>
 
-      <section class="interlude">
-        <div class="container container--narrow">
+      <section class="band">
+        <div class="container">
           <p class="serif-quote"><strong>Identity says:</strong> This is what I am.</p>
           <p class="serif-quote"><strong>Signature says:</strong> This is how I am becoming recognizable in relation.</p>
         </div>
@@ -185,9 +182,11 @@ function formTarget(query) {
             </p>
           </div>
           <div class="grid grid--3">
-            <RouterLink v-for="inv in invitations" :key="inv.title" :to="formTarget(inv.query)" class="card">
-              <h3 class="card-title">{{ inv.title }}</h3>
-              <p class="card-text">{{ inv.text }}</p>
+            <RouterLink :to="formTarget({})" class="card">
+              <h3 class="card-title">Create House</h3>
+              <p class="card-text">
+                Name it yourself. Authorship, provenance, categories and constitution all begin blank.
+              </p>
             </RouterLink>
           </div>
           <div class="section-foot">
@@ -197,8 +196,8 @@ function formTarget(query) {
         </div>
       </section>
 
-      <section class="interlude">
-        <div class="container container--narrow">
+      <section class="band band--alt">
+        <div class="container">
           <p class="serif-quote">The first question is not whether the platform can scale.</p>
           <p class="serif-quote">It is whether a Shared First Civilization can genuinely form.</p>
         </div>
