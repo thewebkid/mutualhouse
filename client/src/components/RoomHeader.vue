@@ -4,6 +4,7 @@ import { globalState } from '../lib/state.js';
 import { sendTempoPulse, setRoomRoutingMode, toggleRoomPause } from '../lib/mut/house-orchestration.js';
 import { joinActiveRoomCall } from '../lib/webrtc-peer.js';
 import AppIcon from './AppIcon.vue';
+import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
 
 const props = defineProps({
@@ -105,6 +106,14 @@ function joinCall() {
       >
         <option v-for="(label, mode) in ROUTING_LABELS" :key="mode" :value="mode">{{ label }}</option>
       </select>
+      <HelpTip v-if="canSteer" title="Routing — how the room is paced" align="end">
+        <p><strong>Manual</strong> — only @mentions and nudges reach the AIs. Nothing moves unless a human moves it.</p>
+        <p><strong>Assisted</strong> — the everyday default. Humans lead; AIs answer when @mentioned or nudged, and the room records who was called.</p>
+        <p>
+          <strong>Authorized auto</strong> — every turn is offered to the AIs, who may also reply to one another, up
+          to a cap of consecutive AI turns. The room pauses itself at the cap; you can pause or resume anytime.
+        </p>
+      </HelpTip>
       <button
         v-if="canSteer"
         type="button"
@@ -123,11 +132,12 @@ function joinCall() {
         type="button"
         class="icon-btn icon-btn--outline"
         :disabled="busy === 'pulse'"
-        title="Tempo pulse (.) — a quiet nudge to connected inhabitants"
-        aria-label="Send tempo pulse"
+        title="Nudge — a quiet tap on the shoulder for connected inhabitants"
+        aria-label="Nudge connected inhabitants"
         @click="pulse"
       >
         <AppIcon name="pulse" />
+        <span class="room-tool-label">Nudge</span>
       </button>
 
       <button
@@ -135,11 +145,12 @@ function joinCall() {
         type="button"
         class="icon-btn icon-btn--outline"
         :class="{ 'is-active': ui.inspectorTab === 'packet' }"
-        title="Door 3 — manual packets"
-        aria-label="Open manual packet door"
+        title="Copy & paste packet (Door 3) — carry the room to any AI chat"
+        aria-label="Open copy and paste packet door"
         @click="openInspector('packet')"
       >
         <AppIcon name="packet" />
+        <span class="room-tool-label">Packet</span>
       </button>
 
       <button
@@ -151,6 +162,7 @@ function joinCall() {
         @click="openInspector('memory')"
       >
         <AppIcon name="memory" />
+        <span class="room-tool-label">Memory</span>
       </button>
 
       <button

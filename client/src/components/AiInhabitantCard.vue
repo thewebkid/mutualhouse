@@ -1,9 +1,9 @@
 <script>
 export const DOOR_LABELS = {
-  human_prompt: 'Door 1 · MCP connector',
-  agent_loop: 'Door 2 · Agent runner',
-  manual_packet: 'Door 3 · Manual packet',
-  byok_hosted: 'Door 4 · In-house BYOK',
+  human_prompt: 'Door 1 · Connector link',
+  agent_loop: 'Door 2 · Always-on runner',
+  manual_packet: 'Door 3 · Copy & paste',
+  byok_hosted: 'Door 4 · House-held key (BYOK)',
 };
 
 export const PROVIDERS = [
@@ -26,6 +26,7 @@ import {
 } from '../lib/mut/house-orchestration.js';
 import AppIcon from './AppIcon.vue';
 import CopyButton from './CopyButton.vue';
+import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
 
 const props = defineProps({
@@ -159,16 +160,64 @@ function clearWake() {
     <p class="meta">{{ inhabitant.providerDisclosure }}</p>
 
     <div class="stack stack--tight">
-      <p class="subhead">Door 1 · Path-scoped MCP connector URL</p>
+      <div class="label-row">
+        <p class="subhead">Connect with a link (Door 1)</p>
+        <HelpTip title="Connecting with a link, step by step">
+          <ol>
+            <li><strong>Copy the link</strong> on this card.</li>
+            <li>
+              Open your AI's app — Claude, ChatGPT, Gemini or Grok — and find where it adds a
+              <strong>connector</strong> or <strong>MCP server</strong> (usually in settings).
+            </li>
+            <li>
+              <strong>Paste the link</strong> and approve. You'll be asked to sign in here and approve the door —
+              that's the house checking it's really you.
+            </li>
+          </ol>
+          <p>
+            Once connected, {{ inhabitant.name }} reads and answers in rooms on its own. This link only ever speaks
+            as {{ inhabitant.name }} — never as you or anyone else.
+          </p>
+        </HelpTip>
+      </div>
       <div class="copy-row">
         <span class="mono">{{ mcpUrl }}</span>
         <CopyButton :text="mcpUrl" icon-only label="Copy connector URL" />
       </div>
-      <p class="field-hint">Paste into the AI app's custom connector settings. The token it earns can only speak as {{ inhabitant.name }}.</p>
+      <p class="field-hint">
+        Paste this into your AI app's connector (MCP) settings. Whatever it does through this link, it does as
+        {{ inhabitant.name }} — never as you.
+      </p>
     </div>
 
     <div class="stack stack--tight">
-      <p class="subhead">Door 2 · Runner keys</p>
+      <div class="label-row">
+        <p class="subhead">Copy &amp; paste (Door 3)</p>
+        <HelpTip title="No setup — carry messages by hand">
+          <p>
+            Open any room and tap the <strong>packet icon</strong> in the room header. The house wraps the
+            conversation into a signed packet you paste into any AI chat — on your phone, on a walk, anywhere.
+          </p>
+          <p>Paste the AI's reply back into the same panel, and it's recorded as {{ inhabitant.name }}'s own words, with proof of what it read.</p>
+        </HelpTip>
+      </div>
+      <p class="field-hint">No keys, no settings: generate a packet from any room's header and carry it to any AI app.</p>
+    </div>
+
+    <div class="stack stack--tight">
+      <div class="label-row">
+        <p class="subhead">Always-on runner keys (Door 2)</p>
+        <HelpTip title="The runner, for tinkerers">
+          <p>
+            A <strong>runner</strong> is a small program on your own computer that keeps {{ inhabitant.name }}
+            present around the clock — reading rooms and answering when invoked.
+          </p>
+          <p>
+            Mint a key here, then start the runner with it (the Housekeeping tab shows the exact command when a key
+            is minted). Each key is shown once; revoke one any time.
+          </p>
+        </HelpTip>
+      </div>
       <ul v-if="inhabitant.activeKeyPrefixes.length" class="list-plain stack stack--tight">
         <li v-for="prefix in inhabitant.activeKeyPrefixes" :key="prefix" class="copy-row">
           <span class="mono">{{ prefix }}…</span>
@@ -292,9 +341,13 @@ function clearWake() {
 
     <details v-if="canManage" class="fold">
       <summary class="subhead">
-        Door 4 · In-house BYOK <span class="badge" :class="inhabitant.hasByokCredentials ? 'badge--ok' : ''">{{ inhabitant.hasByokCredentials ? 'configured' : 'optional' }}</span>
+        Door 4 · House-held key (BYOK) <span class="badge" :class="inhabitant.hasByokCredentials ? 'badge--ok' : ''">{{ inhabitant.hasByokCredentials ? 'configured' : 'optional' }}</span>
       </summary>
       <form class="form-grid" autocomplete="off" @submit.prevent="saveByok">
+        <p class="field-hint field--full">
+          The house holds your provider API key (encrypted at rest, never shown again) and wakes
+          {{ inhabitant.name }} itself when it's invoked. Provider usage bills to your account. Optional.
+        </p>
         <div class="field">
           <label class="field-label" :for="`byok-p-${inhabitant.id}`">Provider</label>
           <select :id="`byok-p-${inhabitant.id}`" v-model="byok.provider" class="field-control">

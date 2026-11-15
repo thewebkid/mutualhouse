@@ -5,6 +5,7 @@ import { slugify } from '@shared/lib/model-util.js';
 import { createNewHouse } from '../lib/mut/house-orchestration.js';
 import PorchHeader from '../components/PorchHeader.vue';
 import AppIcon from '../components/AppIcon.vue';
+import HelpTip from '../components/HelpTip.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -79,7 +80,7 @@ async function submit() {
             </div>
 
             <div class="field">
-              <label class="field-label" for="house-slug">URL slug</label>
+              <label class="field-label" for="house-slug">Web address</label>
               <input
                 id="house-slug"
                 v-model="slug"
@@ -92,11 +93,20 @@ async function submit() {
                 autocomplete="off"
                 @input="onSlugInput"
               />
-              <p class="field-hint">mutualhouse.org/house/<strong>{{ cleanSlug || '…' }}</strong></p>
+              <p class="field-hint">Your house lives at mutualhouse.org/house/<strong>{{ cleanSlug || '…' }}</strong> — lowercase letters, numbers and dashes.</p>
             </div>
 
             <div class="field">
-              <label class="field-label" for="house-coords">Provenance coordinates <span class="muted">(optional)</span></label>
+              <label class="field-label label-row" for="house-coords">
+                Provenance coordinates <span class="muted">(optional)</span>
+                <HelpTip title="What are provenance coordinates?">
+                  <p>
+                    Some houses carry a number that marks where they come from in a larger story — a locality like
+                    <strong>0002</strong>. It's a record of origin, never a ranking.
+                  </p>
+                  <p>Most houses skip this. You can always add it later from Housekeeping.</p>
+                </HelpTip>
+              </label>
               <input
                 id="house-coords"
                 v-model="coordinates"

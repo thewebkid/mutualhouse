@@ -1,0 +1,199 @@
+@use 'media' as *;
+
+// ===========================================================================
+// Help: the "?" mark and its plain-language note, plus how-it-works steps.
+// The house explains itself in place — nobody should need a manual.
+// ===========================================================================
+
+.help-tip {
+  display: inline-flex;
+  flex: none;
+  vertical-align: middle;
+}
+
+.help-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    background-color var(--duration) var(--ease);
+
+  &:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--primary-soft);
+  }
+
+  svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+}
+
+.help-scrim {
+  display: none;
+
+  @include phone {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 84;
+    background: var(--overlay);
+  }
+}
+
+.help-pop {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(1rem + var(--safe-bottom));
+  top: auto;
+  z-index: 85;
+  max-height: 62dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 16px 44px var(--shadow-lg),
+    0 2px 0 var(--border);
+
+  @include tablet-up {
+    bottom: auto;
+    right: auto;
+    max-height: min(26rem, 70dvh);
+  }
+
+  &--flip {
+    transform: translateY(-100%);
+  }
+}
+
+.help-pop-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+
+  .icon-btn {
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: -0.25rem -0.5rem 0 0;
+  }
+}
+
+.help-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.help-body {
+  > p {
+    margin: 0 0 0.65em;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  ol,
+  ul {
+    margin: 0 0 0.65em;
+    padding-left: 1.25em;
+  }
+
+  li + li {
+    margin-top: 0.3em;
+  }
+
+  strong {
+    color: var(--text-heading);
+  }
+}
+
+// A label row with its "?" riding along — keeps related help beside its subject
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+
+  > .help-tip {
+    margin-top: -0.1rem;
+  }
+}
+
+// ===========================================================================
+// How-it-works steps: three numbered plaques, horizontal on tablet and up
+// ===========================================================================
+
+.steps-grid {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: step;
+
+  @include tablet-up {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  > li {
+    counter-increment: step;
+    position: relative;
+    padding: var(--space-4);
+    padding-top: var(--space-5);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+
+    &::before {
+      content: counter(step);
+      position: absolute;
+      top: calc(-1 * var(--space-3));
+      left: var(--space-4);
+      display: grid;
+      place-items: center;
+      width: 1.75rem;
+      height: 1.75rem;
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--primary-ink);
+      background: var(--primary);
+      border-radius: var(--radius);
+      box-shadow: 0 2px 0 var(--primary-hover);
+    }
+
+    .label {
+      display: block;
+      margin-bottom: var(--space-1);
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+  }
+}

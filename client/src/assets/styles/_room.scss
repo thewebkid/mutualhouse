@@ -18,11 +18,11 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   margin: var(--space-2) 0 0;
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size-adjust: none;
-  font-variation-settings: 'SOFT' 100;
   font-size: 1.5rem;
-  font-weight: 620;
+  font-weight: 650;
+  letter-spacing: -0.015em;
   line-height: 1.2;
   color: var(--text-heading);
 }
@@ -246,6 +246,25 @@ li.rail-item {
   border-color: var(--border);
 }
 
+// Icon buttons in the masthead carry a short word on desktop, where there's room
+.room-tool-label {
+  display: none;
+}
+
+@include desktop {
+  .room-head-actions .icon-btn:has(.room-tool-label) {
+    width: auto;
+    padding: 0 0.65rem;
+    gap: 0.35em;
+  }
+
+  .room-tool-label {
+    display: inline;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+}
+
 .stage-bands {
   display: flex;
   flex-direction: column;
@@ -335,11 +354,11 @@ li.rail-item {
 }
 
 .turn-author {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size-adjust: none;
-  font-variation-settings: 'SOFT' 100;
-  font-size: 1.25rem;
-  font-weight: 620;
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   line-height: 1.2;
   color: color-mix(in srgb, var(--sig, var(--text-muted)) 62%, var(--text-heading));
 }
@@ -533,7 +552,7 @@ li.rail-item {
   border-radius: 0 var(--radius) var(--radius) 0;
 
   .prose {
-    font-size: 1.2rem;
+    font-size: 1rem;
   }
 }
 
@@ -603,7 +622,7 @@ li.rail-item {
   padding: var(--space-3) var(--space-4) var(--space-2);
   font-family: var(--font-read);
   font-size-adjust: none;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   line-height: 1.7;
   color: var(--text);
   background: transparent;

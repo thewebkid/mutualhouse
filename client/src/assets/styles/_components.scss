@@ -273,10 +273,11 @@ button.card,
 }
 
 .card-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size-adjust: none;
-  font-size: 1.45rem;
-  font-weight: 560;
+  font-size: 1.35rem;
+  font-weight: 640;
+  letter-spacing: -0.015em;
   line-height: 1.25;
   color: var(--text-heading);
   margin: 0 0 var(--space-2);
@@ -295,6 +296,34 @@ button.card,
   line-height: 1.7;
   color: var(--text-muted);
   margin: 0;
+}
+
+// A wide call-to-action card: words on the left, deeds on the right
+.cta-card {
+  display: grid;
+  gap: var(--space-4);
+  padding: clamp(1.75rem, 4vw, 2.5rem);
+
+  .section-title {
+    margin-bottom: var(--space-2);
+  }
+
+  .action-row {
+    margin-top: 0;
+  }
+
+  .section-foot {
+    margin-top: 0;
+  }
+
+  @include tablet-up {
+    grid-template-columns: minmax(0, 1.5fr) auto;
+    align-items: center;
+
+    .section-foot {
+      grid-column: 1 / -1;
+    }
+  }
 }
 
 .panel {
@@ -710,10 +739,10 @@ button.card,
     break-inside: avoid;
     padding: 0.4rem 0;
     border-top: 1px dotted var(--border);
-    font-family: var(--font-serif);
+    font-family: var(--font-display);
     font-size-adjust: none;
-    font-variation-settings: 'SOFT' 50;
-    font-size: 1.2rem;
+    font-weight: 500;
+    font-size: 1.05rem;
     line-height: 1.6;
     color: var(--text);
   }
@@ -730,10 +759,10 @@ button.card,
 
   li {
     padding: 0.3rem 0.8rem;
-    font-family: var(--font-serif);
+    font-family: var(--font-display);
     font-size-adjust: none;
-    font-variation-settings: 'SOFT' 100;
-    font-size: 1.2rem;
+    font-weight: 550;
+    font-size: 1.05rem;
     line-height: 1.5;
     color: var(--text-heading);
     background: var(--surface);
@@ -790,10 +819,10 @@ button.card,
       place-items: center;
       width: 2.25rem;
       height: 2.25rem;
-      font-family: var(--font-serif);
+      font-family: var(--font-display);
       font-size-adjust: none;
-      font-size: 1.25rem;
-      font-weight: 620;
+      font-size: 1.1rem;
+      font-weight: 650;
       color: var(--primary);
       background: var(--surface);
       border: 1.5px solid var(--primary);

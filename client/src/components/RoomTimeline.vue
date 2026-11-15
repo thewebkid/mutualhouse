@@ -182,8 +182,15 @@ onBeforeUnmount(() => {
     @scroll.passive="onScroll"
   >
     <div v-if="!entries.length" class="empty">
-      <p class="serif-line">This room is quiet.</p>
-      <p class="meta">Whatever is spoken here stays inside the house unless the house releases it.</p>
+      <p class="serif-line">This room is quiet — for now.</p>
+      <p class="meta">
+        Say the first thing in the composer below. Whatever is spoken here stays inside the house unless the house
+        releases it.
+      </p>
+      <p v-if="!house.aiInhabitants.length" class="meta">
+        Want an AI in the conversation? Welcome one from <strong>Housekeeping → AI inhabitants</strong> — it takes
+        about a minute.
+      </p>
     </div>
 
     <ol v-else ref="list" class="turn-list leaf">

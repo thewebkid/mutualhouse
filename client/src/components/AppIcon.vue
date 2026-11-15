@@ -42,6 +42,7 @@ const PATHS = {
   scroll: 'M8 4h11v13a3 3 0 0 1-3 3H6a2 2 0 0 1-2-2v-2h11v2a2 2 0 0 0 2 2M8 4a2 2 0 0 0-2 2v10M11 8h5M11 12h5',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   pulse: 'M12 12h.01',
+  help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.4 9.2a2.7 2.7 0 0 1 5.3.7c0 1.8-2.7 2.3-2.7 4.1M12 17.4h.01',
 };
 
 const d = computed(() => PATHS[props.name] ?? '');
