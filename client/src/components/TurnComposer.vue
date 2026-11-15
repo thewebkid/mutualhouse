@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue';
+import { resolveMentionedInhabitantIds } from '@shared/lib/mentions.js';
 import { globalState, showError } from '../lib/state.js';
 import { postRoomTurn, sendTempoPulse, uploadRoomFile } from '../lib/mut/house-orchestration.js';
 import {
@@ -81,19 +82,25 @@ function toggleInvoke(id) {
   else invoked.value.push(id);
 }
 
+function addressedIds() {
+  const mentioned = resolveMentionedInhabitantIds(body.value, ais.value);
+  return [...new Set([...invoked.value, ...mentioned])];
+}
+
 function buildRouting() {
   const aiIds = ais.value.map((a) => a.id);
+  const addressed = addressedIds();
   let openSeal = null;
   let sealId = null;
   if (sealMode.value === 'peer_sealed' || sealMode.value === 'blind_simultaneous') {
     openSeal = {
       mode: sealMode.value,
-      targetInhabitantIds: invoked.value.length ? [...invoked.value] : aiIds,
+      targetInhabitantIds: addressed.length ? [...addressed] : aiIds,
     };
   } else if (sealMode.value === 'attach' && activeSeal.value) {
     sealId = activeSeal.value.id;
   }
-  const invokedInhabitantIds = openSeal && !invoked.value.length ? openSeal.targetInhabitantIds : [...invoked.value];
+  const invokedInhabitantIds = openSeal && !addressed.length ? openSeal.targetInhabitantIds : [...addressed];
   return { openSeal, sealId, invokedInhabitantIds };
 }
 
@@ -221,8 +228,8 @@ function excerpt(text = '') {
           :key="a.id"
           type="button"
           class="chip"
-          :class="{ 'is-active': invoked.includes(a.id) }"
-          :aria-pressed="invoked.includes(a.id)"
+          :class="{ 'is-active': addressedIds().includes(a.id) }"
+          :aria-pressed="addressedIds().includes(a.id)"
           :title="`${a.presenceLabel} · ${a.provider}`"
           @click="toggleInvoke(a.id)"
         >

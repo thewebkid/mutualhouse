@@ -152,6 +152,11 @@ export class AiInhabitant extends Inhabitant {
     'doorType',
     'handoffNote',
     'hasByokCredentials',
+    'hasWakeUrl',
+    'wakeUrl',
+    'hasWakeSecret',
+    'wakeAuthHeader',
+    'hasWakeBearer',
     'mcpEndpointPath',
     'activeKeyPrefixes',
   ];
@@ -164,6 +169,11 @@ export class AiInhabitant extends Inhabitant {
   doorType = 'human_prompt'; // human_prompt | agent_loop | manual_packet | byok_hosted
   handoffNote = '';
   hasByokCredentials = false;
+  hasWakeUrl = false;
+  wakeUrl = null;
+  hasWakeSecret = false;
+  wakeAuthHeader = null;
+  hasWakeBearer = false;
   activeKeyPrefixes = [];
 
   constructor(def = {}, house = null) {
@@ -177,6 +187,11 @@ export class AiInhabitant extends Inhabitant {
     this.doorType = def.doorType ?? 'human_prompt';
     this.handoffNote = def.handoffNote ?? '';
     this.hasByokCredentials = Boolean(def.hasByokCredentials);
+    this.hasWakeUrl = Boolean(def.hasWakeUrl);
+    this.wakeUrl = def.wakeUrl ?? null;
+    this.hasWakeSecret = Boolean(def.hasWakeSecret);
+    this.wakeAuthHeader = def.wakeAuthHeader ?? null;
+    this.hasWakeBearer = Boolean(def.hasWakeBearer);
     this.mcpEndpointPath =
       def.mcpEndpointPath ?? (this.id ? `/mcp/inh/${this.id}` : null);
     this.activeKeyPrefixes = Array.isArray(def.activeKeyPrefixes)

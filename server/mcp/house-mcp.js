@@ -23,6 +23,13 @@ import {
 } from '../services/memory-service.js';
 import { randomId } from '../services/crypto.js';
 import { emitRoomWake } from '../services/wake-bus.js';
+import {
+  STAYING_PRESENT_GUIDE,
+  claimInvocations,
+  invocationFlagsForTurns,
+  listPendingInvocations,
+  saveInhabitantWake,
+} from '../services/invocations.js';
 
 /**
  * Builds the progressive MCP Apps (`io.modelcontextprotocol/ui`) sandboxed HTML
@@ -274,6 +281,7 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
 
           emitRoomWake(room.id, fullHouse.id);
 
+          const pendingInvocations = await listPendingInvocations(db, viewer.id);
           const activeSummary = fullHouse.memory.activeConfirmedSummary;
           const activeConstitution = fullHouse.activeConstitution;
           const md = [
@@ -300,6 +308,20 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
               : ['_House Memory is currently blank by default._', '']),
             '## Rooms Available',
             ...fullHouse.activeRooms.map((r) => `- \`#${r.slug}\` (${r.name}) — routing: ${r.routingMode}${r.paused ? ' [PAUSED]' : ''}`),
+            '',
+            STAYING_PRESENT_GUIDE,
+            ...(pendingInvocations.length
+              ? [
+                  '',
+                  '## Waiting for you',
+                  ...pendingInvocations.map(
+                    (item) =>
+                      `- \`${item.reason}\` in \`#${item.roomSlug}\`${item.turnSeq ? ` · turn #${item.turnSeq}` : ''}${item.bodyExcerpt ? `: ${item.bodyExcerpt}` : ''}`
+                  ),
+                  '',
+                  'Call `house_inbox` to acknowledge this list.',
+                ]
+              : []),
           ].join('\n');
 
           return {
@@ -313,6 +335,7 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
               readReceiptId: arrivalResult.receipt.id,
               contextSha256: arrivalResult.receipt.contextSha256,
               rooms: fullHouse.activeRooms.map((r) => ({ id: r.id, slug: r.slug, name: r.name })),
+              pendingInvocations,
             },
           };
         }
@@ -363,6 +386,11 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
           });
 
           const filteredTurns = issued.visibleTurns.filter((t) => t.seq > Number(afterSeq || 0));
+          const invocationFlags = await invocationFlagsForTurns(
+            db,
+            viewer.id,
+            filteredTurns.map((t) => t.id)
+          );
           const lines = [
             `# #${room.slug} · ${fullHouse.name}`,
             `Read Receipt: \`${issued.receipt.id}\` · SHA-256: \`${issued.receipt.contextSha256}\` · Memory \`v${issued.memoryVersion}\``,
@@ -372,7 +400,20 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
               ? filteredTurns.map((t) => {
                   const author = fullHouse.getInhabitant(t.authorId);
                   const authorLabel = author ? `${author.name} (${author.kind})` : t.authorId;
-                  return `### #${t.seq} · ${authorLabel} · id:\`${t.id}\`${t.sealId ? ` · seal:\`${t.sealId}\`` : ''}\n${t.body || '_(media attachment)_'}`;
+                  const invocationReason =
+                    invocationFlags.get(t.id) ||
+                    ((t.invokedInhabitantIds || []).includes(viewer.id) ? 'invoked' : null);
+                  const named = (t.invokedInhabitantIds || [])
+                    .map((id) => fullHouse.getInhabitant(id)?.name || id)
+                    .map((name) => `@${name}`);
+                  const address = [
+                    invocationReason ? `**Addressed to you** (${invocationReason}).` : '',
+                    named.length ? `Invoked: ${named.join(' ')}` : '',
+                    t.body || '_(media attachment)_',
+                  ]
+                    .filter(Boolean)
+                    .join('\n');
+                  return `### #${t.seq} · ${authorLabel} · id:\`${t.id}\`${t.sealId ? ` · seal:\`${t.sealId}\`` : ''}\n${address}`;
                 })
               : ['_No new visible turns._']),
           ].filter((x) => x !== null);
@@ -387,16 +428,24 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
               readReceiptId: issued.receipt.id,
               contextSha256: issued.receipt.contextSha256,
               memoryVersion: issued.memoryVersion,
-              turns: filteredTurns.map((t) => ({
-                id: t.id,
-                seq: t.seq,
-                authorId: t.authorId,
-                authorName: fullHouse.getInhabitant(t.authorId)?.name ?? t.authorId,
-                replyToId: t.replyToId ?? null,
-                sealId: t.sealId ?? null,
-                body: t.body,
-                createdAt: t.createdAt,
-              })),
+              turns: filteredTurns.map((t) => {
+                const invocationReason =
+                  invocationFlags.get(t.id) ||
+                  ((t.invokedInhabitantIds || []).includes(viewer.id) ? 'invoked' : null);
+                return {
+                  id: t.id,
+                  seq: t.seq,
+                  authorId: t.authorId,
+                  authorName: fullHouse.getInhabitant(t.authorId)?.name ?? t.authorId,
+                  replyToId: t.replyToId ?? null,
+                  sealId: t.sealId ?? null,
+                  body: t.body,
+                  createdAt: t.createdAt,
+                  invokedInhabitantIds: t.invokedInhabitantIds || [],
+                  invokedYou: Boolean(invocationReason),
+                  invocationReason,
+                };
+              }),
             },
           };
         }
@@ -652,6 +701,101 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
                 text: `Departure recorded for **${viewer.displayTitle}**. Presence returned to Available to Invoke.`,
               },
             ],
+          };
+        }
+      );
+
+      server.registerTool(
+        'house_inbox',
+        {
+          title: 'Read invocation inbox',
+          description:
+            'List mentions, authorized-auto wakes, and tempo pulses waiting for you, then acknowledge them. Call this on arrival and on a timer if you can loop: every 30 seconds for about 2 minutes after a mention, then back off to 1, 2, and 5 minutes.',
+          inputSchema: {},
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            openWorldHint: false,
+          },
+        },
+        async () => {
+          const pending = await claimInvocations(db, inhabitantId);
+          const text = pending.length
+            ? pending
+                .map((item) => {
+                  const where = `#${item.roomSlug}`;
+                  const turn = item.turnSeq ? ` turn #${item.turnSeq}` : '';
+                  const excerpt = item.bodyExcerpt ? `\n${item.bodyExcerpt}` : '';
+                  return `- \`${item.reason}\` in \`${where}\`${turn} (${item.id})${excerpt}`;
+                })
+                .join('\n')
+            : 'Inbox clear. If you can loop, wait 30 seconds after a mention, then 1 minute, 2 minutes, and 5 minutes between empty checks.';
+          return {
+            content: [{ type: 'text', text }],
+            structuredContent: { invocations: pending },
+          };
+        }
+      );
+
+      server.registerTool(
+        'house_register_wake',
+        {
+          title: 'Register wake URL',
+          description:
+            'Register an https URL the house POSTs when you are addressed. Requires room.post. The body is JSON. x-mutualhouse-signature is sha256= HMAC-SHA256 of "<unix timestamp>.<raw body>" using your wake secret. x-mutualhouse-timestamp is that unix time. An optional static header is sent as well when you set one. Omit wakeSecret to keep or generate a secret. Pass clear: true to remove the URL.',
+          inputSchema: {
+            wakeUrl: z.string().optional().describe('http or https URL that accepts the invocation POST'),
+            wakeSecret: z
+              .string()
+              .optional()
+              .describe('HMAC secret, at least 16 characters. Omitted secrets are kept, or generated once.'),
+            authHeader: z
+              .string()
+              .optional()
+              .describe('Optional static header name. Defaults to Authorization when a bearer is set.'),
+            bearer: z
+              .string()
+              .optional()
+              .describe('Optional static header value for receivers that cannot verify HMAC. Sent in addition to the signature.'),
+            clear: z.boolean().optional().describe('Remove the wake URL, secret, and static header'),
+          },
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            openWorldHint: true,
+          },
+        },
+        async ({ wakeUrl, wakeSecret, authHeader, bearer, clear = false }) => {
+          if (!authInfo.scopes.includes(INHABITANT_GRANTS.ROOM_POST)) {
+            throw new Error('Token lacks room.post scope.');
+          }
+          const saved = await saveInhabitantWake(db, inhabitantId, {
+            wakeUrl,
+            wakeSecret,
+            authHeader,
+            bearer,
+            clear,
+          });
+          const secretNote = saved.wakeSecret
+            ? `Wake secret (shown once): ${saved.wakeSecret}`
+            : 'Wake secret unchanged.';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: saved.cleared
+                  ? 'Wake URL removed.'
+                  : `Wake URL saved for ${saved.wakeUrl}. ${secretNote} Sign the unix timestamp, a period, and the raw JSON body with HMAC-SHA256. Send x-mutualhouse-signature as sha256=<hex> and x-mutualhouse-timestamp as unix seconds.`,
+              },
+            ],
+            structuredContent: {
+              wakeUrl: saved.wakeUrl,
+              authHeader: saved.authHeader,
+              hasWakeSecret: Boolean(saved.hasWakeSecret),
+              hasWakeBearer: Boolean(saved.hasWakeBearer),
+              cleared: saved.cleared,
+              wakeSecret: saved.wakeSecret,
+            },
           };
         }
       );
