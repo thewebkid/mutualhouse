@@ -16,7 +16,7 @@ const ui = globalState.ui;
 
 const TABS = [
   { id: 'receipt', label: 'Receipt' },
-  { id: 'packet', label: 'Door 3 Packet' },
+  { id: 'packet', label: 'Packet' },
   { id: 'memory', label: 'Memory' },
 ];
 
@@ -181,14 +181,18 @@ function openMemoryView() {
     <!-- Read receipt -->
     <section v-if="tab === 'receipt'" class="stack" role="tabpanel">
       <div v-if="!receipt" class="empty">
-        <p class="serif-line">No read receipt to show.</p>
-        <p class="meta">Choose “Inspect Receipt” on an AI turn to see exactly what that inhabitant read.</p>
+        <p class="serif-line">No read receipt to show yet.</p>
+        <p class="meta">
+          Every AI turn carries proof of exactly what it read before it spoke. Choose
+          <strong>Inspect Receipt</strong> on any AI turn to see it — byte for byte.
+        </p>
       </div>
 
       <template v-else>
         <div>
           <p class="eyebrow">Read receipt</p>
           <h2 class="card-title">{{ receipt.inhabitant?.displayTitle ?? receipt.inhabitant?.name ?? 'AI inhabitant' }}</h2>
+          <p class="meta">Exactly what this inhabitant received before speaking — turns, memory version, and provider.</p>
           <p v-if="!linkedReceipt" class="badge badge--outline">Nearest prior read — not linked to this turn</p>
         </div>
 
@@ -252,10 +256,11 @@ function openMemoryView() {
     <!-- Door 3 manual packet -->
     <section v-else-if="tab === 'packet'" class="stack" role="tabpanel">
       <div>
-        <p class="eyebrow">Door 3 · Signed manual packet</p>
+        <p class="eyebrow">Copy &amp; paste · Door 3</p>
         <p class="meta">
           Carry the room to an AI inhabitant in any chat app — on your phone, on a walk — and paste its reply back.
-          The Ed25519 <code>house-receipt</code> fence proves what it read.
+          Three moves: <strong>generate</strong> a packet below, <strong>paste</strong> it to the AI,
+          <strong>bring its reply back</strong>. The signed <code>house-receipt</code> fence proves what it read.
         </p>
       </div>
 
@@ -276,11 +281,17 @@ function openMemoryView() {
           <legend class="field-label">Packet kind</legend>
           <label class="toggle-row">
             <input v-model="packetKind" type="radio" value="contribution" />
-            <span class="toggle-text">Contribution</span>
+            <span class="toggle-text">
+              Contribution
+              <small>A reply in the conversation</small>
+            </span>
           </label>
           <label class="toggle-row">
             <input v-model="packetKind" type="radio" value="arrival" />
-            <span class="toggle-text">Arrival</span>
+            <span class="toggle-text">
+              Arrival
+              <small>The AI's first entrance into the house</small>
+            </span>
           </label>
         </fieldset>
 
@@ -288,7 +299,7 @@ function openMemoryView() {
 
         <button type="button" class="btn btn--primary btn--block" :disabled="issuing" @click="issuePacket">
           <AppIcon name="packet" />
-          {{ issuing ? 'Signing…' : 'Generate Signed Arrival / Contribution Packet' }}
+          {{ issuing ? 'Signing…' : 'Generate the packet' }}
         </button>
 
         <div v-if="packetMarkdown" class="stack stack--tight">
@@ -318,10 +329,10 @@ function openMemoryView() {
             <span class="toggle-text">Record inside the open seal</span>
           </label>
           <button type="submit" class="btn btn--block" :disabled="importing || !pasted.trim()">
-            {{ importing ? 'Verifying…' : 'Verify & record contribution' }}
+            {{ importing ? 'Checking…' : 'Check & record the reply' }}
           </button>
           <p v-if="lastImport" class="badge" :class="lastImport.drift ? 'badge--warn' : 'badge--ok'">
-            {{ lastImport.drift ? 'Recorded — receipt fence modified (drift)' : 'Signature verified and recorded' }}
+            {{ lastImport.drift ? 'Recorded — the receipt fence was modified (drift)' : 'Signature checked and recorded' }}
           </p>
         </form>
       </template>

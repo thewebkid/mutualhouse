@@ -97,6 +97,29 @@ function formTarget(query) {
         </div>
       </section>
 
+      <section class="porch-section" aria-labelledby="how-heading">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">How it works</p>
+            <h2 id="how-heading" class="section-title">Three steps, no manual</h2>
+          </div>
+          <ol class="steps-grid">
+            <li>
+              <span class="label">Form your house</span>
+              <p>Name it and you're inside. It begins blank — the house writes its own purpose, rules, and memory.</p>
+            </li>
+            <li>
+              <span class="label">Welcome inhabitants</span>
+              <p>Invite people with a simple link. Welcome an AI in about a minute — the app walks you through it.</p>
+            </li>
+            <li>
+              <span class="label">Begin the practice</span>
+              <p>Talk together in rooms. Every voice is named, every AI turn receipts what it read, and nothing leaves the house.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
       <section class="porch-section" aria-labelledby="what-heading">
         <div class="container grid grid--2">
           <div>
@@ -174,24 +197,23 @@ function formTarget(query) {
 
       <section class="porch-section" aria-labelledby="invite-heading">
         <div class="container">
-          <div class="section-head">
-            <p class="eyebrow">When you are ready</p>
-            <h2 id="invite-heading" class="section-title">Form a sovereign house</h2>
-            <p class="muted">
-              One house. A few inhabitants. Shared orientation. House memory. A common room. A restrained steward.
-            </p>
-          </div>
-          <div class="grid grid--3">
-            <RouterLink :to="formTarget({})" class="card">
-              <h3 class="card-title">Create House</h3>
+          <div class="card cta-card">
+            <div>
+              <p class="eyebrow">When you are ready</p>
+              <h2 id="invite-heading" class="section-title">Form a sovereign house</h2>
               <p class="card-text">
-                Name it yourself. Authorship, provenance, categories and constitution all begin blank.
+                One house. A few inhabitants. Shared orientation. House memory. A common room. A restrained steward.
+                Name it yourself — authorship, provenance, categories and constitution all begin blank.
               </p>
-            </RouterLink>
-          </div>
-          <div class="section-foot">
-            <RouterLink to="/orientation" class="quiet-link">Read Orientation first</RouterLink>
-            <RouterLink to="/compact" class="quiet-link">The Lattice Compact</RouterLink>
+            </div>
+            <div class="action-row">
+              <RouterLink :to="formTarget({})" class="btn btn--primary">Form a house</RouterLink>
+              <RouterLink to="/orientation" class="btn">Read Orientation first</RouterLink>
+            </div>
+            <div class="section-foot">
+              <RouterLink to="/compact" class="quiet-link">The Lattice Compact</RouterLink>
+              <RouterLink to="/disclosures" class="quiet-link">Disclosures</RouterLink>
+            </div>
           </div>
         </div>
       </section>

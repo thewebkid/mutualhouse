@@ -33,9 +33,7 @@ const signedIn = computed(() => Boolean(globalState.currentUser));
       </button>
 
       <RouterLink v-if="signedIn" to="/houses" class="btn btn--sm btn--primary">My Houses</RouterLink>
-      <RouterLink v-else to="/sign-in" class="btn btn--sm btn--primary">
-        <span class="hide-phone">Enter /</span> Sign In
-      </RouterLink>
+      <RouterLink v-else to="/sign-in" class="btn btn--sm btn--primary">Sign in</RouterLink>
     </div>
   </header>
 </template>

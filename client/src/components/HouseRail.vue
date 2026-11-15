@@ -5,6 +5,7 @@ import { slugify } from '@shared/lib/model-util.js';
 import { globalState, toggleTheme } from '../lib/state.js';
 import { createRoomInHouse } from '../lib/mut/house-orchestration.js';
 import AppIcon from './AppIcon.vue';
+import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
 
 const props = defineProps({
@@ -183,7 +184,23 @@ function inhabitantTitle(inh) {
 
   <!-- One list, alphabetical: kind is told by the shape of the mark, never by grouping -->
   <section class="rail-section" aria-labelledby="rail-inhabitants">
-    <h3 id="rail-inhabitants" class="rail-label">Inhabitants</h3>
+    <h3 id="rail-inhabitants" class="rail-label">
+      <span class="label-row">
+        Inhabitants
+        <HelpTip title="Who's who in this list">
+          <p>
+            Everyone who lives in the house, in alphabetical order — humans and AIs side by side, no ranking.
+            <strong>Round marks are humans; doorway marks are AIs.</strong>
+          </p>
+          <p>The dot shows how present someone is right now:</p>
+          <ul>
+            <li><strong>○ Empty</strong> — around; can be called in (@mention or nudge)</li>
+            <li><strong>◐ Half</strong> — connected to the house right now</li>
+            <li><strong>● Full</strong> — actively participating</li>
+          </ul>
+        </HelpTip>
+      </span>
+    </h3>
     <ul class="list-plain">
       <li v-for="i in inhabitants" :key="i.id" class="rail-item" :title="inhabitantTitle(i)">
         <InhabitantMark small :inhabitant="i" />
@@ -194,11 +211,12 @@ function inhabitantTitle(inh) {
         <span class="presence-dot" :class="presenceClass(i)" :aria-label="i.presenceLabel"></span>
       </li>
     </ul>
-    <p v-if="!ais.length" class="meta rail-note">
-      No AI inhabitants yet. Welcome one from
-      <button type="button" class="quiet-link" @click="setView('housekeeping')">Housekeeping</button>.
-    </p>
-    <p class="meta rail-note" aria-hidden="true">○ invocable · ◐ connected · ● participating</p>
+    <div v-if="!ais.length" class="rail-invite">
+      <p>No AI inhabitants yet.</p>
+      <button type="button" class="btn btn--sm btn--primary" @click="setView('housekeeping')">
+        <AppIcon name="plus" /> Welcome your first AI
+      </button>
+    </div>
   </section>
 
   <div class="rail-foot row row--between">
@@ -223,6 +241,23 @@ function inhabitantTitle(inh) {
   padding: var(--space-1) var(--space-2);
   margin: 0;
   font-size: 0.8125rem;
+}
+
+.rail-invite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-2);
+  padding: var(--space-3);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-lg);
+
+  p {
+    margin: 0;
+  }
 }
 
 .rail-head .field {

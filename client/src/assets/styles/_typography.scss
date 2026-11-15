@@ -1,5 +1,5 @@
-// Serif floor: readable Fraunces text is never below 1.2rem beside 1rem sans chrome.
-// (Rule inherited from the sibling sites; kept here so the three houses stay consistent.)
+// One family, two textures: Outfit carries chrome and display (headings, bylines, spoken
+// lines) at 600+ weight; DM Sans carries long reading. No serif anywhere in the house.
 
 *,
 *::before,
@@ -29,13 +29,12 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size-adjust: none;
   font-optical-sizing: auto;
-  font-variation-settings: 'SOFT' 100;
-  font-weight: 560;
+  font-weight: 640;
   line-height: 1.2;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--text-heading);
   margin: 0 0 0.6em;
 }
@@ -119,8 +118,9 @@ hr {
   font-family: var(--font-read);
   font-size-adjust: none;
   font-optical-sizing: auto;
-  font-size: 1.2rem;
-  line-height: 1.8;
+  font-size: 1.1rem;
+  line-height: 1.75;
+  letter-spacing: 0.001em;
   color: var(--text);
   overflow-wrap: anywhere;
   text-wrap: pretty;
@@ -146,7 +146,7 @@ hr {
   h2,
   h3,
   h4 {
-    font-family: var(--font-serif);
+    font-family: var(--font-display);
     text-wrap: balance;
   }
 
@@ -245,28 +245,27 @@ hr {
 }
 
 .prose--lead {
-  font-size: clamp(1.3rem, 2.2vw, 1.5rem);
+  font-size: clamp(1.15rem, 2vw, 1.3rem);
   line-height: 1.65;
 }
 
 .serif-line {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size-adjust: none;
-  font-variation-settings: 'SOFT' 50;
-  font-size: 1.2rem;
-  line-height: 1.7;
+  font-weight: 550;
+  font-size: 1.15rem;
+  line-height: 1.6;
 }
 
 // A large spoken line. Roman, not italic; a lead-in `strong` becomes a small sans label above it.
 .serif-quote {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size-adjust: none;
   font-optical-sizing: auto;
-  font-variation-settings: 'SOFT' 100;
-  font-weight: 500;
+  font-weight: 600;
   font-size: clamp(1.5rem, 3.2vw, 2.25rem);
   line-height: 1.3;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--text-heading);
   margin: 0;
 
@@ -347,10 +346,11 @@ hr {
 }
 
 .section-title {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   font-size-adjust: none;
   font-size: clamp(1.6rem, 3vw, 2.1rem);
-  font-weight: 560;
+  font-weight: 640;
+  letter-spacing: -0.015em;
   color: var(--text-heading);
   margin: 0 0 var(--space-4);
 }

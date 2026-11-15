@@ -9,6 +9,7 @@ import {
   startVoiceRecording,
 } from '../lib/media-recorder.js';
 import AppIcon from './AppIcon.vue';
+import HelpTip from './HelpTip.vue';
 
 const props = defineProps({
   house: { type: Object, required: true },
@@ -143,7 +144,15 @@ async function send() {
 }
 
 function onKeydown(ev) {
-  if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+  if (ev.key !== 'Enter' || ev.isComposing) return;
+  if (ev.ctrlKey || ev.metaKey) {
+    ev.preventDefault();
+    send();
+    return;
+  }
+  // Plain Enter sends on devices with a hardware keyboard. Touch keyboards keep
+  // Enter as a newline — nobody should have to find Shift on a sheet of glass.
+  if (!ev.shiftKey && window.matchMedia('(pointer: fine)').matches) {
     ev.preventDefault();
     send();
   }
@@ -241,31 +250,41 @@ function excerpt(text = '') {
         <legend class="visually-hidden">Seal this turn</legend>
         <label class="toggle-row">
           <input v-model="sealMode" type="radio" value="none" />
-          <span class="toggle-text">No seal</span>
+          <span class="toggle-text">No seal — everyone reads it right away</span>
         </label>
         <label class="toggle-row">
           <input v-model="sealMode" type="radio" value="peer_sealed" />
           <span class="toggle-text">
-            Open sealed first reading
-            <small>Peer-sealed: AI peers read independently</small>
+            Sealed first reading
+            <small>Each invited AI answers on its own, without seeing the others. You unveil them together when ready.</small>
           </span>
         </label>
         <label class="toggle-row">
           <input v-model="sealMode" type="radio" value="blind_simultaneous" />
           <span class="toggle-text">
             Blind simultaneous
-            <small>Hidden from everyone until all respond</small>
+            <small>Answers stay hidden from everyone — humans too — until every invited AI has answered.</small>
           </span>
         </label>
         <label v-if="activeSeal" class="toggle-row">
           <input v-model="sealMode" type="radio" value="attach" />
           <span class="toggle-text">
-            Respond inside the open seal
-            <small>Your turn joins the sealed readings</small>
+            Answer inside the open seal
+            <small>Your words join the sealed readings and stay hidden with them.</small>
           </span>
         </label>
+        <HelpTip title="Why seal a reading?">
+          <p>
+            Sometimes you want each AI's honest first take — uninfluenced by the others. A seal keeps every answer
+            closed until you're ready to unveil them side by side.
+          </p>
+          <p>
+            The house records a fingerprint of each sealed answer when it's written, so you can verify nothing was
+            rewritten after the unveiling.
+          </p>
+        </HelpTip>
         <p v-if="sealMode === 'peer_sealed' || sealMode === 'blind_simultaneous'" class="meta">
-          Targets: {{ invoked.length ? 'the invoked inhabitants' : 'every AI inhabitant' }}.
+          Goes to: {{ invoked.length ? 'the invoked inhabitants' : 'every AI inhabitant' }}.
         </p>
       </fieldset>
 
@@ -359,13 +378,13 @@ function excerpt(text = '') {
           <span v-if="sealSummary" class="badge badge--accent hide-phone">{{ sealSummary }}</span>
 
           <div class="composer-send">
-            <span class="meta hide-phone">Ctrl ↵</span>
+            <span class="meta hide-phone">Enter to send · Shift+Enter for a new line</span>
             <button
               v-if="ais.length"
               type="button"
               class="icon-btn icon-btn--outline"
-              title="Tempo pulse (.)"
-              aria-label="Send tempo pulse"
+              title="Nudge — a quiet tap on the shoulder for the invoked AIs"
+              aria-label="Nudge invoked inhabitants"
               @click="pulse"
             >
               <AppIcon name="pulse" />

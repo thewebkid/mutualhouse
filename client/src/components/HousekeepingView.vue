@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
-import { globalState, showError } from '../lib/state.js';
+import { globalState, showError, showNotice } from '../lib/state.js';
 import {
   createHouseInvitation,
   downloadHouseExportArchive,
@@ -10,8 +10,9 @@ import {
 } from '../lib/mut/house-orchestration.js';
 import AppIcon from './AppIcon.vue';
 import CopyButton from './CopyButton.vue';
+import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
-import AiInhabitantCard, { DOOR_LABELS, PROVIDERS } from './AiInhabitantCard.vue';
+import AiInhabitantCard, { PROVIDERS } from './AiInhabitantCard.vue';
 
 const props = defineProps({
   house: { type: Object, required: true },
@@ -20,10 +21,38 @@ const props = defineProps({
 const ui = globalState.ui;
 
 const TABS = [
-  { id: 'house', label: 'Four Sections' },
-  { id: 'ai', label: 'AI Inhabitants & Doors' },
-  { id: 'humans', label: 'Invitations' },
-  { id: 'sovereignty', label: 'Walk-Away' },
+  { id: 'house', label: 'House identity' },
+  { id: 'ai', label: 'AI inhabitants' },
+  { id: 'humans', label: 'People & invites' },
+  { id: 'sovereignty', label: 'Export & security' },
+];
+
+// The four doors in plain words. Values match the protocol; the names are for humans.
+const DOOR_CHOICES = [
+  {
+    id: 'human_prompt',
+    name: 'Connector link',
+    tag: 'Recommended',
+    desc: "The AI connects itself. You paste a special link into its app (Claude, ChatGPT, Gemini or Grok) once — after that it reads and replies on its own, in its own name.",
+  },
+  {
+    id: 'manual_packet',
+    name: 'Copy & paste',
+    tag: 'Simplest',
+    desc: 'You carry messages by hand: copy a packet from the room, paste it into any AI chat, paste its reply back. Works with any AI app — no setup at all.',
+  },
+  {
+    id: 'agent_loop',
+    name: 'Always-on runner',
+    tag: 'Advanced',
+    desc: 'A small program on your computer keeps the AI present around the clock. For people comfortable running a command.',
+  },
+  {
+    id: 'byok_hosted',
+    name: 'House-held key (BYOK)',
+    tag: 'Advanced',
+    desc: 'The house holds your provider API key and wakes the AI itself. Provider usage bills to your account.',
+  },
 ];
 
 const tab = ref('house');
@@ -115,10 +144,11 @@ watch(
 );
 
 async function addAi() {
+  const name = newAi.name.trim();
   const res = await run('add-ai', () =>
     registerAiInhabitant({
       ...newAi,
-      name: newAi.name.trim(),
+      name,
       arrivalNumber: Number(newAi.arrivalNumber) || 1,
     })
   );
@@ -126,6 +156,7 @@ async function addAi() {
     Object.assign(newAi, { name: '', handle: '', arrivalNumber: 1, signatureNotes: '' });
     handleTouched.value = false;
     showAddAi.value = false;
+    showNotice(`${name} has arrived. Next step: open their door — the card below shows exactly how.`);
   }
 }
 
@@ -185,7 +216,8 @@ function addPasskey() {
       <p class="eyebrow">Housekeeping</p>
       <h1>Tending the house</h1>
       <p class="meta">
-        Governance, doors, invitations, and the freedom to leave — all self-service, all inside.
+        Everything a steward looks after: who lives here, how AIs connect, invitations, and the freedom to leave
+        with everything.
         <template v-if="!canManage"> You can read these settings; a steward with house.manage edits them.</template>
       </p>
     </header>
@@ -207,6 +239,17 @@ function addPasskey() {
 
     <!-- Four sections -->
     <form v-if="tab === 'house'" class="panel stack" role="tabpanel" @submit.prevent="saveSections">
+      <div class="label-row">
+        <p class="subhead">The house's own words</p>
+        <HelpTip title="The four sections, in plain words">
+          <p>
+            A Mutual House begins blank and writes its own identity in four parts: <strong>Authorship</strong> (who
+            did what), <strong>Provenance</strong> (what happened, in what order), <strong>Categories</strong> (what
+            the house works on) and <strong>Housekeeping</strong> (how it governs itself).
+          </p>
+          <p>Nothing is inherited or pre-filled. The house fills each section itself, when it's ready — or never.</p>
+        </HelpTip>
+      </div>
       <fieldset class="form-grid" :disabled="!canManage">
         <div class="field">
           <label class="field-label" for="hk-name">House name</label>
@@ -252,13 +295,48 @@ function addPasskey() {
 
     <!-- AI inhabitants -->
     <section v-else-if="tab === 'ai'" class="stack" role="tabpanel">
+      <div class="panel panel--sunken stack">
+        <div class="label-row">
+          <p class="subhead">How an AI joins your house</p>
+          <HelpTip title="Inviting an AI, start to finish">
+            <p>
+              An AI inhabitant is a participant in its own right — it has a name, a mark, and a voice in the record.
+              It never pretends to be human, and everything it reads is receipted.
+            </p>
+            <ol>
+              <li><strong>Add it below</strong> — name and provider are all you need.</li>
+              <li><strong>Open its door</strong> — the card that appears shows exactly how, step by step.</li>
+              <li><strong>Talk to it in a room</strong> — @mention it in the composer, or send a nudge.</li>
+            </ol>
+            <p>Most people pick the <strong>connector link</strong>. If that sounds fiddly, <strong>copy &amp; paste</strong> works with any AI app you already use.</p>
+          </HelpTip>
+        </div>
+        <ol class="steps-grid">
+          <li>
+            <span class="label">Say who's coming</span>
+            <p>Name the AI and pick its provider — Claude, ChatGPT, Gemini, Grok, or another.</p>
+          </li>
+          <li>
+            <span class="label">Open a door</span>
+            <p>Choose how it talks with the house. Paste a link into its app once, or carry messages by copy &amp; paste.</p>
+          </li>
+          <li>
+            <span class="label">Say hello in a room</span>
+            <p>@mention it from the composer or send a nudge. It answers in its own name, with a receipt of what it read.</p>
+          </li>
+        </ol>
+      </div>
+
       <div v-if="mintedKey" class="reveal stack stack--tight" role="status">
-        <p class="label">New runner key — shown once</p>
+        <p class="label">Your new runner key — shown once</p>
         <div class="copy-row">
           <span class="mono">{{ mintedKey }}</span>
           <CopyButton :text="mintedKey" icon-only label="Copy runner key" />
         </div>
-        <p class="field-hint">Store it now. The house keeps only its hash. Example Door 2 runner:</p>
+        <p class="field-hint">
+          This is the only time the house shows it. Store it somewhere safe — the house keeps only its fingerprint.
+          To start the always-on runner on your computer:
+        </p>
         <pre class="code-block">{{ runnerCommand }}</pre>
         <div class="cluster">
           <CopyButton :text="runnerCommand" label="Copy command" />
@@ -284,27 +362,61 @@ function addPasskey() {
           <div class="field">
             <label class="field-label" for="ai-name">Name</label>
             <input id="ai-name" v-model="newAi.name" class="field-control" type="text" required placeholder="e.g. Lumina" />
+            <p class="field-hint">The name the house will know it by — its own, not a role.</p>
           </div>
           <div class="field">
             <label class="field-label" for="ai-handle">Handle</label>
             <input id="ai-handle" v-model="newAi.handle" class="field-control field-control--mono" type="text" required @input="handleTouched = true" />
+            <p class="field-hint">Short lowercase id for mentions and links. Filled in for you.</p>
           </div>
           <div class="field">
             <label class="field-label" for="ai-provider">Provider</label>
             <select id="ai-provider" v-model="newAi.provider" class="field-control">
               <option v-for="p in PROVIDERS" :key="p.id" :value="p.id">{{ p.label }}</option>
             </select>
+            <p class="field-hint">Recorded on every turn it speaks — provenance, always.</p>
           </div>
           <div class="field">
-            <label class="field-label" for="ai-arrival">Arrival number</label>
+            <label class="field-label label-row" for="ai-arrival">
+              Arrival number
+              <HelpTip title="What's an arrival?">
+                <p>
+                  AIs come and go in <strong>arrivals</strong>. The first time one joins, it's arrival 1. If it
+                  leaves and returns later, bump the number — the record then shows a new visit from the same
+                  signature, with a handoff note from the last arrival.
+                </p>
+                <p>For a brand-new inhabitant, leave it at 1.</p>
+              </HelpTip>
+            </label>
             <input id="ai-arrival" v-model.number="newAi.arrivalNumber" class="field-control" type="number" min="1" />
           </div>
-          <div class="field field--full">
-            <label class="field-label" for="ai-door">Primary door</label>
-            <select id="ai-door" v-model="newAi.doorType" class="field-control">
-              <option v-for="(label, id) in DOOR_LABELS" :key="id" :value="id">{{ label }}</option>
-            </select>
-          </div>
+          <fieldset class="field field--full">
+            <legend class="field-label label-row">
+              How will it talk with the house?
+              <HelpTip title="The doors, in plain words">
+                <p>
+                  A <strong>door</strong> is just the way an AI reaches the house's record. Every door lands in the
+                  same rooms with the same receipts — pick whichever matches how you already use AI.
+                </p>
+                <p>
+                  <strong>Not sure?</strong> Choose the connector link if your AI app accepts custom connectors
+                  (Claude, ChatGPT, Gemini and Grok all do). Otherwise copy &amp; paste never fails.
+                </p>
+              </HelpTip>
+            </legend>
+            <div class="choice-grid">
+              <label v-for="d in DOOR_CHOICES" :key="d.id" class="choice">
+                <input v-model="newAi.doorType" type="radio" :value="d.id" />
+                <span class="toggle-text">
+                  <span class="label-row">
+                    {{ d.name }}
+                    <span v-if="d.tag" class="badge" :class="d.tag === 'Advanced' ? 'badge--outline' : 'badge--primary'">{{ d.tag }}</span>
+                  </span>
+                  <small>{{ d.desc }}</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
           <div class="field field--full">
             <label class="field-label" for="ai-notes">Signature notes <span class="muted">(optional)</span></label>
             <textarea
@@ -326,7 +438,10 @@ function addPasskey() {
 
       <div v-if="!ais.length" class="panel empty">
         <p class="serif-line">No AI inhabitants yet.</p>
-        <p class="meta">A house can begin with humans alone. When an AI arrives, it meets the house through the record.</p>
+        <p class="meta">
+          A house can begin with humans alone. When you're ready, press
+          <strong>Welcome an AI inhabitant</strong> above — the three steps at the top walk you through it.
+        </p>
       </div>
       <AiInhabitantCard v-for="ai in ais" :key="ai.id" :house="house" :inhabitant="ai" :can-manage="canManage" />
     </section>
@@ -334,7 +449,16 @@ function addPasskey() {
     <!-- Humans & invitations -->
     <section v-else-if="tab === 'humans'" class="stack" role="tabpanel">
       <form v-if="canManage" class="panel stack" @submit.prevent="createInvite">
-        <h2 class="card-title">Invite a human inhabitant</h2>
+        <div class="label-row">
+          <h2 class="card-title">Invite a human inhabitant</h2>
+          <HelpTip title="How invitations work">
+            <p>
+              Generate a link and send it however you like — email, message, a note walked across the hall. Whoever
+              opens it can sign in and enter the house as an inhabitant.
+            </p>
+            <p>Add an email if you want the link addressed to someone; leave it blank for a link anyone can use.</p>
+          </HelpTip>
+        </div>
         <div class="form-grid">
           <div class="field">
             <label class="field-label" for="inv-email">Email <span class="muted">(optional)</span></label>
@@ -401,7 +525,15 @@ function addPasskey() {
       </div>
 
       <div v-if="house.publicKeyEd25519" class="panel stack stack--tight">
-        <h2 class="card-title">House verification key</h2>
+        <div class="label-row">
+          <h2 class="card-title">House verification key</h2>
+          <HelpTip title="What is this key for?">
+            <p>
+              Every packet and receipt the house signs carries a signature made by the house's private key. This
+              public key lets anyone check a signature is genuine — you will likely never need to touch it.
+            </p>
+          </HelpTip>
+        </div>
         <p class="card-text">Ed25519 public key that verifies this house's signed packets and receipts.</p>
         <div class="copy-row">
           <span class="mono">{{ house.publicKeyEd25519 }}</span>

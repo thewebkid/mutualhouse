@@ -1,43 +1,43 @@
-// Mutual House palette: a lived-in house.
-//   limewash sage walls · clay door · pine for what is held (seals) · green-black ink
+// Mutual House palette: a lived-in house on a bright morning.
+//   warm limewash paper walls · terracotta clay door · pine for what is held (seals)
 //   night = the same house with the lamps on (deep garden green, never indigo or slate)
 // Deliberately shares no hue family with alignos.io (teal / gold / parchment / indigo)
 // or coherenceacrossscales.org (slate-blue / neutral grey).
 
-// Walls (sage limewash)
-$wall-50: #fbfcf8;
-$wall-100: #f6f7f1;
-$wall-200: #eff1e9;
-$wall-300: #e3e7da;
-$wall-400: #d3d9c8;
-$wall-500: #b3bba5;
-$wall-600: #5c6a5f;
-$wall-700: #3f4c43;
-$wall-800: #222b25;
-$wall-900: #141b16;
+// Walls (warm limewash paper — pale, sunlit, never yellow parchment)
+$wall-50: #fdfcf8;
+$wall-100: #faf8f2;
+$wall-200: #f4f1e9;
+$wall-300: #e9e5d9;
+$wall-400: #d9d3c3;
+$wall-500: #b0a893;
+$wall-600: #6d6759;
+$wall-700: #494438;
+$wall-800: #2a261f;
+$wall-900: #1a1712;
 
 // Clay (the door you knock on: actions, links, "this room")
-$clay-300: #f1b392;
-$clay-400: #e6936a;
-$clay-600: #a9461f;
-$clay-700: #8b3716;
+$clay-300: #f2a075;
+$clay-400: #e8763e;
+$clay-600: #c2481b;
+$clay-700: #9a3710;
 
 // Pine (what is held: seals, privacy, inside-by-default)
-$pine-300: #8fd0a9;
-$pine-400: #5fbf92;
-$pine-600: #2f6a4c;
-$pine-700: #234f39;
-$pine-800: #1f3128;
-$pine-900: #0e1410;
+$pine-300: #8ed3ab;
+$pine-400: #52ba89;
+$pine-600: #227250;
+$pine-700: #1a5a3f;
+$pine-800: #173327;
+$pine-900: #0d1712;
 
 :root {
-  // Fraunces: soft, slightly hand-cut serif for headings and everything spoken.
-  // Figtree: friendly, even sans for chrome. Neither sibling uses either face.
-  --font-sans: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
-  // Literata: drawn for long reading on screens. It carries every turn, memory page and
-  // writing surface; Fraunces keeps the house's own voice (headings, room names, bylines).
-  --font-read: 'Literata', 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+  // Outfit: one family, two jobs — chrome at text sizes, and the house's display voice at
+  // 600+ weight with tight tracking (headings, room names, bylines, spoken lines).
+  --font-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  // DM Sans: the reading face. A low-contrast humanist sans drawn for text sizes, so long
+  // passages (turns, memory pages, writing surfaces) read as elegantly as the chrome.
+  --font-read: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
 
   --space-1: 0.25rem;
@@ -50,10 +50,10 @@ $pine-900: #0e1410;
   --space-8: 4.5rem;
 
   // Squarer than the sibling sites: a house is built from plaster and timber, not pebbles.
-  --radius-sm: 0.25rem;
-  --radius: 0.4rem;
-  --radius-lg: 0.65rem;
-  --radius-xl: 1rem;
+  --radius-sm: 0.3rem;
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1.1rem;
   --radius-pill: 50rem;
   // The doorway: round top, near-square foot. Used for AI inhabitants and the porch skyline.
   --radius-arch: 50rem 50rem 0.35rem 0.35rem;
@@ -89,27 +89,27 @@ $pine-900: #0e1410;
 
   --primary: #{$clay-600};
   --primary-hover: #{$clay-700};
-  --primary-soft: rgba(169, 70, 31, 0.1);
+  --primary-soft: rgba(194, 72, 27, 0.1);
   --primary-ink: #fffaf4;
   --accent: #{$pine-600};
   --accent-hover: #{$pine-700};
   --accent-text: #{$pine-700};
-  --accent-soft: rgba(47, 106, 76, 0.1);
+  --accent-soft: rgba(34, 114, 80, 0.1);
 
   --border: #{$wall-400};
-  --border-light: #e0e4d6;
-  --shadow: rgba(20, 32, 24, 0.07);
-  --shadow-lg: rgba(20, 32, 24, 0.18);
-  --overlay: rgba(20, 32, 24, 0.45);
+  --border-light: #e4dfd2;
+  --shadow: rgba(42, 38, 31, 0.08);
+  --shadow-lg: rgba(42, 38, 31, 0.2);
+  --overlay: rgba(42, 38, 31, 0.45);
   --danger: #b3263f;
   --danger-soft: rgba(179, 38, 63, 0.09);
   --success: #2f7d57;
   --success-soft: rgba(47, 125, 87, 0.11);
-  --focus-ring: 0 0 0 3px rgba(169, 70, 31, 0.28);
+  --focus-ring: 0 0 0 3px rgba(194, 72, 27, 0.28);
 
   // Deep wall: the rail, the topbar and the porch footer are always dark
   --hearth-bg: #{$pine-800};
-  --hearth-border: #34493d;
+  --hearth-border: #2c4639;
   // Colour bands on the porch
   --band-bg: #{$pine-700};
   --band-alt-bg: #{$clay-600};
@@ -128,41 +128,41 @@ $pine-900: #0e1410;
 }
 
 @mixin dark-theme {
-  --bg: #121814;
-  --bg-elevated: #19211c;
-  --surface: #1c2620;
-  --surface-hover: #25312a;
-  --surface-sunken: #151d18;
-  --reader-bg: #19211c;
-  --stage-bg: #121814;
-  --text: #e4eadf;
-  --text-muted: #9aa99d;
-  --text-heading: #f4f7f0;
+  --bg: #151912;
+  --bg-elevated: #1a1f16;
+  --surface: #1f251a;
+  --surface-hover: #29311f;
+  --surface-sunken: #12160e;
+  --reader-bg: #1a1f16;
+  --stage-bg: #12160e;
+  --text: #e6e4d7;
+  --text-muted: #a0a294;
+  --text-heading: #f3f1e6;
 
   --primary: #{$clay-400};
   --primary-hover: #{$clay-300};
-  --primary-soft: rgba(230, 147, 106, 0.14);
+  --primary-soft: rgba(232, 118, 62, 0.15);
   --primary-ink: #1a120d;
   --accent: #{$pine-400};
   --accent-hover: #{$pine-300};
   --accent-text: #{$pine-300};
-  --accent-soft: rgba(95, 191, 146, 0.12);
+  --accent-soft: rgba(82, 186, 137, 0.13);
 
-  --border: #2f3d34;
-  --border-light: #26322b;
+  --border: #333b2b;
+  --border-light: #293021;
   --shadow: rgba(0, 0, 0, 0.3);
   --shadow-lg: rgba(0, 0, 0, 0.5);
-  --overlay: rgba(6, 10, 8, 0.65);
+  --overlay: rgba(6, 9, 5, 0.65);
   --danger: #f08a9b;
   --danger-soft: rgba(240, 138, 155, 0.12);
   --success: #7cc4a6;
   --success-soft: rgba(124, 196, 166, 0.12);
-  --focus-ring: 0 0 0 3px rgba(230, 147, 106, 0.38);
+  --focus-ring: 0 0 0 3px rgba(232, 118, 62, 0.4);
 
   --hearth-bg: #{$pine-900};
-  --hearth-border: #1f2b23;
+  --hearth-border: #213026;
   --band-bg: #1b3a2b;
-  --band-alt-bg: #8b3716;
+  --band-alt-bg: #9a3710;
 
   --sig-1: #e5805a;
   --sig-2: #5fbf92;
@@ -182,27 +182,27 @@ $pine-900: #0e1410;
   --bg: var(--hearth-bg);
   --bg-elevated: var(--hearth-bg);
   --surface: rgba(255, 255, 255, 0.06);
-  --surface-hover: rgba(255, 255, 255, 0.09);
+  --surface-hover: rgba(255, 255, 255, 0.1);
   --surface-sunken: rgba(0, 0, 0, 0.22);
-  --text: #e6ece3;
-  --text-muted: #a6b5a9;
-  --text-heading: #f7f9f3;
-  --primary: #f0a67f;
-  --primary-hover: #f6c2a5;
-  --primary-soft: rgba(240, 166, 127, 0.16);
+  --text: #e9ece2;
+  --text-muted: #a9b6aa;
+  --text-heading: #f8f9f3;
+  --primary: #f09a6c;
+  --primary-hover: #f6bd9c;
+  --primary-soft: rgba(240, 154, 108, 0.17);
   --primary-ink: #1a120d;
-  --accent: #8fd0a9;
-  --accent-hover: #b4e3c6;
-  --accent-text: #8fd0a9;
-  --accent-soft: rgba(143, 208, 169, 0.14);
+  --accent: #8ed3ab;
+  --accent-hover: #b6e4c8;
+  --accent-text: #8ed3ab;
+  --accent-soft: rgba(142, 211, 171, 0.14);
   --border: var(--hearth-border);
   --border-light: var(--hearth-border);
   --shadow: rgba(0, 0, 0, 0.3);
-  --focus-ring: 0 0 0 3px rgba(240, 166, 127, 0.4);
+  --focus-ring: 0 0 0 3px rgba(240, 154, 108, 0.42);
   --danger: #f08a9b;
   --danger-soft: rgba(240, 138, 155, 0.14);
-  --success: #8fd0a9;
-  --success-soft: rgba(143, 208, 169, 0.14);
+  --success: #8ed3ab;
+  --success-soft: rgba(142, 211, 171, 0.14);
 
   color: var(--text);
   color-scheme: dark;
