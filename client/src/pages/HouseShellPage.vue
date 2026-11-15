@@ -35,7 +35,7 @@ const VIEW_TITLES = {
 
 const topbarTitle = computed(() => {
   if (view.value !== 'room') return VIEW_TITLES[view.value];
-  return room.value ? `#${room.value.slug}` : house.value?.name ?? '';
+  return room.value ? room.value.name : house.value?.name ?? '';
 });
 
 async function load(slug, roomSlug) {
@@ -152,7 +152,7 @@ function openQuickMemory() {
       </template>
 
       <div v-else class="stage-scroll">
-        <div class="view-body">
+        <div class="view-body leaf">
           <HouseMemoryView v-if="view === 'memory'" :house="house" :room="room" />
           <ConstitutionView v-else-if="view === 'constitution'" :house="house" />
           <HousekeepingView v-else-if="view === 'housekeeping'" :house="house" />

@@ -4,6 +4,7 @@ import { globalState } from '../lib/state.js';
 import { sendTempoPulse, setRoomRoutingMode, toggleRoomPause } from '../lib/mut/house-orchestration.js';
 import { joinActiveRoomCall } from '../lib/webrtc-peer.js';
 import AppIcon from './AppIcon.vue';
+import InhabitantMark from './InhabitantMark.vue';
 
 const props = defineProps({
   house: { type: Object, required: true },
@@ -18,6 +19,24 @@ const ROUTING_LABELS = {
   assisted: 'Assisted routing',
   authorized_auto: 'Authorized auto',
 };
+
+// How the room is being paced, in the house's words; the select below uses the control labels
+const PACE_LABELS = {
+  manual: 'Human-paced',
+  assisted: 'Assisted routing',
+  authorized_auto: 'Authorized auto',
+};
+
+// Alphabetical, so no one is listed first for standing
+const inhabitants = computed(() =>
+  [...props.house.inhabitants].sort((a, b) => a.name.localeCompare(b.name))
+);
+const paceLabel = computed(() => {
+  const base = PACE_LABELS[props.room.routingMode] ?? props.room.routingMode;
+  return props.room.routingMode === 'authorized_auto'
+    ? `${base} · ${props.room.consecutiveAiTurns}/${props.room.autoTurnCap}`
+    : base;
+});
 
 const viewer = computed(() => props.house.viewer);
 const canSteer = computed(() => Boolean(viewer.value?.isHuman && viewer.value.can('room.pause', props.room.id)));
@@ -61,9 +80,17 @@ function joinCall() {
 
 <template>
   <header class="room-head">
-    <div class="room-head-title hide-phone">
-      <h1><span class="rail-hash">#</span>{{ room.slug }}</h1>
-      <p>{{ room.purpose || room.name }}</p>
+    <div class="room-head-title">
+      <h1 class="hide-phone">{{ room.name }}</h1>
+      <p v-if="room.purpose" class="room-purpose hide-phone">{{ room.purpose }}</p>
+      <ul class="room-presence" :aria-label="`Inhabitants of ${room.name}`">
+        <li v-for="inh in inhabitants" :key="inh.id" class="room-presence-who">
+          <InhabitantMark small :inhabitant="inh" />{{ inh.name }}
+        </li>
+        <li class="room-pace" :class="{ 'is-held': room.paused }">
+          {{ paceLabel }}<template v-if="room.paused"> · AI routing paused</template>
+        </li>
+      </ul>
     </div>
 
     <div class="room-head-actions">
@@ -78,12 +105,6 @@ function joinCall() {
       >
         <option v-for="(label, mode) in ROUTING_LABELS" :key="mode" :value="mode">{{ label }}</option>
       </select>
-      <span v-else class="badge badge--primary">{{ ROUTING_LABELS[room.routingMode] ?? room.routingMode }}</span>
-
-      <span v-if="room.routingMode === 'authorized_auto'" class="badge" title="Consecutive AI turns before a human must speak">
-        {{ room.consecutiveAiTurns }}/{{ room.autoTurnCap }} auto
-      </span>
-
       <button
         v-if="canSteer"
         type="button"
@@ -97,8 +118,6 @@ function joinCall() {
         <AppIcon :name="room.paused ? 'play' : 'pause'" />
         {{ room.paused ? 'Paused' : 'Pause' }}
       </button>
-      <span v-else-if="room.paused" class="badge badge--accent">Paused</span>
-
       <button
         v-if="hasAi"
         type="button"

@@ -573,6 +573,7 @@
   background: var(--bg);
   overflow-y: auto;
   overscroll-behavior: contain;
+  border-right: 1px solid var(--hearth-border);
 
   @include phone {
     position: fixed;
@@ -593,12 +594,32 @@
   }
 }
 
+// The reading room: limewash floor with a single leaf (`.leaf`) lying on it.
+// `container-type` lets the leaf drop its side borders when the drawer squeezes the stage.
 .stage {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  background: var(--stage-bg);
+  container: stage / inline-size;
+}
+
+// One continuous sheet to read on: turns, memory pages. Not a card per message.
+.leaf {
+  width: 100%;
+  max-width: var(--leaf-width);
+  margin-inline: auto;
   background: var(--reader-bg);
+  border-inline: 1px solid var(--border);
+
+  @include phone {
+    border-inline: 0;
+  }
+
+  @container stage (max-width: 52rem) {
+    border-inline: 0;
+  }
 }
 
 .stage-scroll {
@@ -608,11 +629,10 @@
   overscroll-behavior: contain;
 }
 
+// House Memory, Constitution and Housekeeping are pages on the same leaf (applied as `.leaf` in markup)
 .view-body {
-  width: 100%;
-  max-width: 52rem;
-  margin: 0 auto;
-  padding: var(--space-5) clamp(1rem, 3vw, 2rem) var(--space-8);
+  min-height: 100%;
+  padding: var(--space-6) var(--leaf-pad) var(--space-8);
 }
 
 .drawer {

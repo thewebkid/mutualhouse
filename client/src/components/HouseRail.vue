@@ -5,6 +5,7 @@ import { slugify } from '@shared/lib/model-util.js';
 import { globalState, toggleTheme } from '../lib/state.js';
 import { createRoomInHouse } from '../lib/mut/house-orchestration.js';
 import AppIcon from './AppIcon.vue';
+import InhabitantMark from './InhabitantMark.vue';
 
 const props = defineProps({
   house: { type: Object, required: true },
@@ -22,8 +23,11 @@ const VIEWS = [
 
 const viewer = computed(() => props.house.viewer);
 const rooms = computed(() => props.house.activeRooms);
-const humans = computed(() => props.house.humanInhabitants);
 const ais = computed(() => props.house.aiInhabitants);
+// Alphabetical, so no one is listed first for standing
+const inhabitants = computed(() =>
+  [...props.house.inhabitants].sort((a, b) => a.name.localeCompare(b.name))
+);
 const otherHouses = computed(() => globalState.myHouses.filter((h) => h.slug !== props.house.slug));
 const isDark = computed(() => ui.theme === 'dark');
 
@@ -76,6 +80,16 @@ function presenceClass(inh) {
 
 function pad(n) {
   return String(n ?? 1).padStart(3, '0');
+}
+
+function inhabitantKind(inh) {
+  if (inh.isAi) return `AI · ${inh.provider}`;
+  return inh.roleLabel || 'human';
+}
+
+// Arrival numbers are provenance: they live in the tooltip, not the name
+function inhabitantTitle(inh) {
+  return inh.isAi ? `${inh.presenceLabel} · arrival ${pad(inh.arrivalNumber)}` : inh.presenceLabel;
 }
 </script>
 
@@ -167,31 +181,20 @@ function pad(n) {
     </button>
   </section>
 
-  <section class="rail-section" aria-labelledby="rail-humans">
-    <h3 id="rail-humans" class="rail-label">Humans</h3>
+  <!-- One list, alphabetical: kind is told by the shape of the mark, never by grouping -->
+  <section class="rail-section" aria-labelledby="rail-inhabitants">
+    <h3 id="rail-inhabitants" class="rail-label">Inhabitants</h3>
     <ul class="list-plain">
-      <li v-for="h in humans" :key="h.id" class="rail-item" :title="h.presenceLabel">
-        <span class="presence-dot" :class="presenceClass(h)" :aria-label="h.presenceLabel"></span>
+      <li v-for="i in inhabitants" :key="i.id" class="rail-item" :title="inhabitantTitle(i)">
+        <InhabitantMark small :inhabitant="i" />
         <span class="rail-item-text">
-          <span>{{ h.name }}<template v-if="viewer?.id === h.id"> (you)</template></span>
-          <small v-if="h.roleLabel">{{ h.roleLabel }}</small>
+          <span>{{ i.name }}<template v-if="viewer?.id === i.id"> (you)</template></span>
+          <small>{{ inhabitantKind(i) }}</small>
         </span>
+        <span class="presence-dot" :class="presenceClass(i)" :aria-label="i.presenceLabel"></span>
       </li>
     </ul>
-  </section>
-
-  <section class="rail-section" aria-labelledby="rail-ai">
-    <h3 id="rail-ai" class="rail-label">AI Peers</h3>
-    <ul v-if="ais.length" class="list-plain">
-      <li v-for="a in ais" :key="a.id" class="rail-item" :title="a.presenceLabel">
-        <span class="presence-dot" :class="presenceClass(a)" :aria-label="a.presenceLabel"></span>
-        <span class="rail-item-text">
-          <span>{{ a.name }} · {{ pad(a.arrivalNumber) }}</span>
-          <small>{{ a.provider }}</small>
-        </span>
-      </li>
-    </ul>
-    <p v-else class="meta rail-note">
+    <p v-if="!ais.length" class="meta rail-note">
       No AI inhabitants yet. Welcome one from
       <button type="button" class="quiet-link" @click="setView('housekeeping')">Housekeeping</button>.
     </p>

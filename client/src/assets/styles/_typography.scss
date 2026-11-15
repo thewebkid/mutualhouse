@@ -116,20 +116,38 @@ hr {
 // ---------------------------------------------------------------------------
 
 .prose {
-  font-family: var(--font-serif);
+  font-family: var(--font-read);
   font-size-adjust: none;
-  font-variation-settings: 'SOFT' 50;
+  font-optical-sizing: auto;
   font-size: 1.2rem;
-  line-height: 1.75;
+  line-height: 1.8;
   color: var(--text);
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 
   > :last-child {
     margin-bottom: 0;
   }
 
+  // A comfortable line for reading aloud; wide things (code, tables) keep the full width
+  p,
+  ul,
+  ol,
+  blockquote {
+    max-width: 65ch;
+  }
+
   p {
-    margin: 0 0 0.85em;
+    margin: 0 0 1em;
+  }
+
+  // Headings inside prose are the house's voice, not the reading face
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-serif);
+    text-wrap: balance;
   }
 
   h1,
@@ -204,7 +222,9 @@ hr {
   }
 
   table {
-    width: 100%;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
     margin: 0 0 0.85em;
     font-family: var(--font-sans);
@@ -281,6 +301,16 @@ hr {
     background: currentColor;
     border-radius: var(--radius-arch);
   }
+}
+
+// The doorway as a standalone mark (day passages). Same shape as the eyebrow glyph.
+.doorway {
+  display: inline-block;
+  flex: none;
+  width: 0.55rem;
+  height: 0.8rem;
+  background: currentColor;
+  border-radius: var(--radius-arch);
 }
 
 .label {

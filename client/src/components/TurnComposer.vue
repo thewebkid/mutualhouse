@@ -296,14 +296,14 @@ function excerpt(text = '') {
       </div>
 
       <div class="composer-box">
-        <label class="visually-hidden" for="composer-input">Your turn in #{{ room.slug }}</label>
+        <label class="visually-hidden" for="composer-input">Your turn in {{ room.name }}</label>
         <textarea
           id="composer-input"
           ref="input"
           v-model="body"
           class="composer-input"
           rows="1"
-          :placeholder="voice.recording ? 'Add a caption (optional)…' : `Speak into #${room.slug}…`"
+          :placeholder="voice.recording ? 'Add a caption (optional)…' : `Add to ${room.name}…`"
           @input="resize"
           @keydown="onKeydown"
         ></textarea>
@@ -372,13 +372,3 @@ function excerpt(text = '') {
     </div>
   </section>
 </template>
-
-<style lang="scss" scoped>
-.kind-select {
-  width: auto;
-  border-color: transparent;
-  background-color: transparent;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-</style>
