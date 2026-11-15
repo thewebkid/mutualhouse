@@ -1,28 +1,44 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { SignJWT, jwtVerify, exportJWK, generateKeyPair as joseGenerateKeyPair } from 'jose';
+import { SignJWT, jwtVerify, exportJWK } from 'jose';
 
 let _masterKey = null;
 let _jwtKeysPromise = null;
 
+// ASN.1 PKCS#8 v1 prefix for a 32-byte Ed25519 private seed (RFC 8410)
+const ED25519_PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+
 function getMasterKeyBuffer() {
   if (_masterKey) return _masterKey;
-  const envHex = process.env.HOUSE_KEY_MASTER_SECRET || process.env.BETTER_AUTH_SECRET || '';
-  if (envHex && envHex.length >= 32) {
-    _masterKey = crypto.createHash('sha256').update(envHex).digest();
+  const envSecret = process.env.HOUSE_KEY_MASTER_SECRET || process.env.BETTER_AUTH_SECRET || '';
+  if (envSecret && envSecret.length >= 32) {
+    _masterKey = crypto.createHash('sha256').update(envSecret).digest();
     return _masterKey;
   }
-  const secretFile = path.resolve(process.cwd(), '.data', 'dev-master.key');
-  fs.mkdirSync(path.dirname(secretFile), { recursive: true });
-  if (fs.existsSync(secretFile)) {
-    const raw = fs.readFileSync(secretFile, 'utf8').trim();
-    _masterKey = crypto.createHash('sha256').update(raw).digest();
-    return _masterKey;
+
+  // Local unconfigured fallback: try `.data/dev-master.key`, falling back to `os.tmpdir()`
+  // so read-only serverless containers never throw EROFS.
+  for (const baseDir of [path.resolve(process.cwd(), '.data'), os.tmpdir()]) {
+    try {
+      const secretFile = path.join(baseDir, 'mh-dev-master.key');
+      fs.mkdirSync(baseDir, { recursive: true });
+      if (fs.existsSync(secretFile)) {
+        const raw = fs.readFileSync(secretFile, 'utf8').trim();
+        _masterKey = crypto.createHash('sha256').update(raw).digest();
+        return _masterKey;
+      }
+      const generated = crypto.randomBytes(32).toString('hex');
+      fs.writeFileSync(secretFile, generated, { mode: 0o600 });
+      _masterKey = crypto.createHash('sha256').update(generated).digest();
+      return _masterKey;
+    } catch {
+      // try next writable directory
+    }
   }
-  const generated = crypto.randomBytes(32).toString('hex');
-  fs.writeFileSync(secretFile, generated, { mode: 0o600 });
-  _masterKey = crypto.createHash('sha256').update(generated).digest();
+
+  _masterKey = crypto.randomBytes(32);
   return _masterKey;
 }
 
@@ -103,43 +119,30 @@ export function verifyWithHouseEd25519(publicKeyEd25519, canonicalPayload, signa
 }
 
 /**
- * Deterministic or persisted EdDSA (Ed25519) JWK pair for OAuth 2.1 MCP JWTs.
+ * Deterministically derives the EdDSA (Ed25519) OAuth 2.1 signing & JWKS keypair
+ * from `HOUSE_KEY_MASTER_SECRET` so every Vercel Fluid Compute instance shares
+ * identical signing keys with zero filesystem writes.
  */
 async function getOAuthSigningKeys() {
   if (_jwtKeysPromise) return _jwtKeysPromise;
   _jwtKeysPromise = (async () => {
-    const keyPath = path.resolve(process.cwd(), '.data', 'oauth-eddsa.json');
-    if (process.env.VITEST !== 'true' && fs.existsSync(keyPath)) {
-      const saved = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
-      const privateKey = crypto.createPrivateKey(saved.privatePem);
-      const publicKey = crypto.createPublicKey(saved.publicPem);
-      const publicJwk = await exportJWK(publicKey);
-      publicJwk.kid = saved.kid;
-      publicJwk.alg = 'EdDSA';
-      publicJwk.use = 'sig';
-      return { privateKey, publicKey, publicJwk, kid: saved.kid };
-    }
-
-    const { publicKey, privateKey } = await joseGenerateKeyPair('EdDSA', {
-      crv: 'Ed25519',
-      extractable: true,
+    const seed = crypto
+      .createHmac('sha256', getMasterKeyBuffer())
+      .update('mh-oauth-ed25519-seed-v1')
+      .digest();
+    const pkcs8Der = Buffer.concat([ED25519_PKCS8_PREFIX, seed]);
+    const privateKey = crypto.createPrivateKey({
+      key: pkcs8Der,
+      format: 'der',
+      type: 'pkcs8',
     });
-    const kid = 'mh-oauth-ed25519-1';
+    const publicKey = crypto.createPublicKey(privateKey);
+    const kid = `mh-ed25519-${sha256HexNode(seed.toString('hex')).slice(0, 12)}`;
     const publicJwk = await exportJWK(publicKey);
     publicJwk.kid = kid;
     publicJwk.alg = 'EdDSA';
     publicJwk.use = 'sig';
 
-    if (process.env.VITEST !== 'true') {
-      try {
-        fs.mkdirSync(path.dirname(keyPath), { recursive: true });
-        const privatePem = privateKey.export({ type: 'pkcs8', format: 'pem' });
-        const publicPem = publicKey.export({ type: 'spki', format: 'pem' });
-        fs.writeFileSync(keyPath, JSON.stringify({ kid, privatePem, publicPem }), { mode: 0o600 });
-      } catch {
-        // Read-only serverless filesystem fallback uses in-memory keys safely alongside DB token row check
-      }
-    }
     return { privateKey, publicKey, publicJwk, kid };
   })();
   return _jwtKeysPromise;

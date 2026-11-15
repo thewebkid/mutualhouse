@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+import path from 'node:path';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 /**
  * Door 2 Agent Runner CLI (`packages/runner/cli.js`) — `Doc` / Local Agent Adapter.
  *

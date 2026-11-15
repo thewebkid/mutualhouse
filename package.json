@@ -13,6 +13,7 @@
     "preview": "vite preview --port 5888",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:migrate": "node scripts/migrate.js",
     "runner": "node packages/runner/cli.js"
   },
   "dependencies": {

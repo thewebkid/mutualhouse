@@ -4,10 +4,13 @@ export const config: VercelConfig = {
   buildCommand: 'npm run build',
   outputDirectory: 'dist',
   rewrites: [
-    routes.rewrite('/api/(.*)', '/api/[...route]'),
-    routes.rewrite('/mcp/(.*)', '/api/[...route]'),
-    routes.rewrite('/oauth2/(.*)', '/api/[...route]'),
-    routes.rewrite('/.well-known/(.*)', '/api/[...route]'),
-    routes.rewrite('/((?!api/|mcp/|oauth2/|\\.well-known/|assets/|manifest\\.webmanifest|sw\\.js|workbox-).*)' , '/index.html'),
+    routes.rewrite('/api/(.*)', '/api/index?__mh_path=/api/$1'),
+    routes.rewrite('/mcp/(.*)', '/api/index?__mh_path=/mcp/$1'),
+    routes.rewrite('/oauth2/(.*)', '/api/index?__mh_path=/oauth2/$1'),
+    routes.rewrite('/.well-known/(.*)', '/api/index?__mh_path=/.well-known/$1'),
+    routes.rewrite(
+      '/((?!api/|mcp/|oauth2/|\\.well-known/|assets/|brand/|manifest\\.webmanifest|sw\\.js|registerSW\\.js|workbox-).*)',
+      '/index.html'
+    ),
   ],
 };

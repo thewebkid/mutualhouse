@@ -18,9 +18,23 @@ let _initPromise = null;
  *  - `await db.query(sqlText, params)` -> `{ rows }`
  *  - `await db.transaction(async (tx) => { ... })` -> runs inside `BEGIN` / `COMMIT` / `ROLLBACK`
  */
+function normalizePgSslMode(connectionString) {
+  try {
+    const u = new URL(connectionString);
+    const mode = u.searchParams.get('sslmode');
+    if (mode === 'require' || mode === 'prefer' || mode === 'verify-ca') {
+      u.searchParams.set('sslmode', 'verify-full');
+      return u.toString();
+    }
+  } catch {
+    // keep raw connectionString if not URL-shaped
+  }
+  return connectionString;
+}
+
 function createPoolAdapter(connectionString) {
   const pool = new Pool({
-    connectionString,
+    connectionString: normalizePgSslMode(connectionString),
     max: 10,
   });
 

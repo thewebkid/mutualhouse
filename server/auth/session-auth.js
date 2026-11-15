@@ -74,6 +74,8 @@ export async function destroyBrowserSession(c, db) {
   deleteCookie(c, SESSION_COOKIE, { path: '/' });
 }
 
+export const DEFAULT_EMAIL_FROM = 'The Mutual House <porch@mail.mutualhouse.org>';
+
 export async function createAndSendMagicLink(
   db,
   { originUrl, email, name = '', redirectTo = '/houses' }
@@ -83,6 +85,7 @@ export async function createAndSendMagicLink(
     throw new Error('Please provide a valid email address.');
   }
 
+  const mlId = randomId('ml');
   const rawToken = randomOpaqueToken('mhl', 24);
   const tokenHash = sha256HexNode(rawToken);
   const expiresAt = new Date(Date.now() + MAGIC_LINK_TTL_SEC * 1000);
@@ -91,7 +94,7 @@ export async function createAndSendMagicLink(
     `INSERT INTO mh_magic_links (id, email, name, token_hash, redirect_to, expires_at)
      VALUES ($1,$2,$3,$4,$5,$6)`,
     [
-      randomId('ml'),
+      mlId,
       cleanEmail,
       String(name || '').trim() || null,
       tokenHash,
@@ -104,12 +107,19 @@ export async function createAndSendMagicLink(
 
   if (process.env.RESEND_API_KEY) {
     const resend = new Resend(process.env.RESEND_API_KEY);
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM || 'Mutual House <porch@mutualhouse.org>',
-      to: cleanEmail,
-      subject: 'Your door into The Mutual House',
-      text: `Open this single-use link within 20 minutes to enter The Mutual House:\n\n${verifyUrl}\n\nIf you did not ask for this link, you may safely ignore it.`,
-    });
+    const { error } = await resend.emails.send(
+      {
+        from: process.env.EMAIL_FROM || DEFAULT_EMAIL_FROM,
+        to: [cleanEmail],
+        subject: 'Your door into The Mutual House',
+        text: `Open this single-use link within 20 minutes to enter The Mutual House:\n\n${verifyUrl}\n\nIf you did not ask for this link, you may safely ignore it.`,
+      },
+      { idempotencyKey: `magic-link/${mlId}` }
+    );
+    if (error) {
+      console.error('[resend-magic-link]', error);
+      throw new Error(`Email delivery failed: ${error.message || 'Check RESEND_API_KEY and EMAIL_FROM domain verification.'}`);
+    }
     return { sent: true };
   }
 
@@ -122,6 +132,36 @@ export async function createAndSendMagicLink(
     devVerifyUrl: verifyUrl,
     devToken: process.env.VITEST === 'true' ? rawToken : undefined,
   };
+}
+
+export async function sendHouseInviteEmailIfConfigured({
+  inviteId,
+  toEmail,
+  houseName,
+  invitedByName,
+  inviteUrl,
+}) {
+  if (!toEmail || !process.env.RESEND_API_KEY) return { emailed: false };
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const { error } = await resend.emails.send(
+      {
+        from: process.env.EMAIL_FROM || DEFAULT_EMAIL_FROM,
+        to: [toEmail],
+        subject: `An invitation to inhabit ${houseName}`,
+        text: `${invitedByName} has invited you to inhabit "${houseName}" on The Mutual House.\n\nOpen this invitation within 7 days:\n${inviteUrl}\n`,
+      },
+      { idempotencyKey: `house-invite/${inviteId}` }
+    );
+    if (error) {
+      console.warn('[resend-invite]', error);
+      return { emailed: false, emailError: error.message };
+    }
+    return { emailed: true };
+  } catch (err) {
+    console.warn('[resend-invite]', err);
+    return { emailed: false, emailError: err.message };
+  }
 }
 
 export async function consumeMagicLink(c, db, rawToken) {

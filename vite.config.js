@@ -1,10 +1,16 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+if (process.env.VITEST !== 'true') {
+  dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+  dotenv.config({ path: path.resolve(__dirname, '.env') });
+}
 
 /**
  * Local Vite middleware mounting the exact Hono server (`server/app.js`)

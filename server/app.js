@@ -17,6 +17,7 @@ import {
   finishWebAuthnLogin,
   finishWebAuthnRegistration,
   getSessionUser,
+  sendHouseInviteEmailIfConfigured,
 } from './auth/session-auth.js';
 import {
   buildAuthServerMetadata,
@@ -701,12 +702,13 @@ export function createServerApp() {
     const email = body.email ? String(body.email).trim().toLowerCase() : null;
     const roleLabel = String(body.roleLabel || 'Inhabitant').trim();
 
+    const inviteId = randomId('inv');
     await db.query(
       `INSERT INTO house_invites (
         id, house_id, invited_by_inhabitant_id, email, role_label, grants, token_hash, expires_at
       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)`,
       [
-        randomId('inv'),
+        inviteId,
         ctx.fullHouse.id,
         ctx.viewer.id,
         email,
@@ -718,6 +720,14 @@ export function createServerApp() {
     );
 
     const inviteUrl = `${originUrl}/invite/${encodeURIComponent(rawToken)}`;
+    const emailDelivery = await sendHouseInviteEmailIfConfigured({
+      inviteId,
+      toEmail: email,
+      houseName: ctx.fullHouse.name,
+      invitedByName: ctx.viewer.name,
+      inviteUrl,
+    });
+
     return c.json({
       token: rawToken,
       url: inviteUrl,
@@ -725,6 +735,7 @@ export function createServerApp() {
       email,
       roleLabel,
       expiresAt: expiresAt.toISOString(),
+      ...emailDelivery,
     });
   });
 

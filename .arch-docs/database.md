@@ -1,7 +1,7 @@
 # Database — Neon Serverless Postgres & Local PGlite
 
-**Production:** Neon Serverless Postgres (`DATABASE_URL` / `POSTGRES_URL`) via `pg` Pool + Drizzle ORM.  
-**Local Dev / Tests (zero-config):** When `DATABASE_URL` is unset, `server/db/index.js` initializes an embedded PostgreSQL 16 engine (`@electric-sql/pglite`) persisted at `./.data/pglite` (or in-memory during Vitest runs), running the exact same SQL migrations and ACID transactions.
+**Production & Provisioned Dev:** Neon Serverless Postgres (`DATABASE_URL` / `POSTGRES_URL`, provisioned on Vercel as `neon-aureolin-anchor`) via `pg` Pool (`sslmode=verify-full` normalized). Run `npm run db:migrate` (`scripts/migrate.js`) at any time to verify/apply the 24-table DDL against `.env.local`.  
+**Zero-Config Fallback / Tests:** When `DATABASE_URL` is unset (or in `vitest`), `server/db/index.js` boots an embedded PostgreSQL 16 engine (`@electric-sql/pglite`) running the exact same SQL migrations and ACID transactions.
 
 ## Core Tables
 
