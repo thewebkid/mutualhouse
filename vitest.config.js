@@ -15,5 +15,10 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.js'],
     testTimeout: 30000,
+    hookTimeout: 30000,
+    // Never let a developer DATABASE_URL point the suite at Neon.
+    env: {
+      DATABASE_URL: 'memory://',
+    },
   },
 });

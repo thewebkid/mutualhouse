@@ -33,10 +33,15 @@ describe('MCP OAuth scope selection', () => {
     expect(scopesForDynamicClientRegistration(undefined)).toEqual(ALL);
     expect(scopesForDynamicClientRegistration('')).toEqual(ALL);
     expect(scopesForDynamicClientRegistration('room.read')).toEqual(['room.read']);
+    expect(scopesForDynamicClientRegistration(['room.read', 'memory.propose'])).toEqual([
+      'room.read',
+      'memory.propose',
+    ]);
+    expect(scopesForDynamicClientRegistration('openid profile')).toEqual(ALL);
     expect(() => scopesForDynamicClientRegistration('seal.release')).toThrow(/human-only/);
   });
 
-  it('rewrites a room.read bearer challenge to the advertised scope set', () => {
+  it('rewrites a room.read bearer challenge to the advertised scope set', async () => {
     const original = new Response(JSON.stringify({ error: 'invalid_token' }), {
       status: 401,
       headers: {
@@ -50,6 +55,24 @@ describe('MCP OAuth scope selection', () => {
       'Bearer error="invalid_token", error_description="Missing Authorization header", scope="room.read room.post memory.propose", resource_metadata="https://mutualhouse.vercel.app/.well-known/oauth-protected-resource/mcp/inh/inh_1"'
     );
     expect(rewritten.status).toBe(401);
+    expect(await rewritten.json()).toEqual({ error: 'invalid_token' });
+  });
+
+  it('inserts a scope parameter when the bearer challenge omitted one', () => {
+    const original = new Response(null, {
+      status: 401,
+      headers: {
+        'www-authenticate':
+          'Bearer error="invalid_token", resource_metadata="https://mutualhouse.vercel.app/.well-known/oauth-protected-resource/mcp/inh/inh_1"',
+      },
+    });
+    const rewritten = rewriteBearerChallengeScopes(original, ['room.read']);
+    expect(rewritten.headers.get('www-authenticate')).toBe(
+      'Bearer error="invalid_token", scope="room.read", resource_metadata="https://mutualhouse.vercel.app/.well-known/oauth-protected-resource/mcp/inh/inh_1"'
+    );
+    expect(rewriteBearerChallengeScopes(original, [])).toBe(original);
+    const notAResponse = { headers: new Headers() };
+    expect(rewriteBearerChallengeScopes(notAResponse, ALL)).toBe(notAResponse);
   });
 
   it('steps up with the full entitled set only when re-auth can grant the missing scope', () => {
