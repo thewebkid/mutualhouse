@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import { unzipSync, strFromU8 } from 'fflate';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetDbForTests } from '../server/db/index.js';
+import { getDb, resetDbForTests } from '../server/db/index.js';
 import { createServerApp } from '../server/app.js';
+import { mintAuthorizationCode } from '../server/auth/mcp-oauth.js';
 
 const ORIGIN = 'http://localhost:5888';
 
@@ -167,15 +168,18 @@ describe('The Now — End-to-End Multi-Door Mutual House Server', () => {
     // Verify unauthenticated hit to `/mcp/inh/:museId` returns 401 with RFC 9728 resource_metadata
     const challengeRes = await mcpCall(app, muse.id, null, 'tools/list');
     expect(challengeRes.status).toBe(401);
-    expect(challengeRes.headers.get('www-authenticate')).toContain(
+    const challengeHeader = challengeRes.headers.get('www-authenticate');
+    expect(challengeHeader).toContain(
       `/.well-known/oauth-protected-resource/mcp/inh/${muse.id}`
     );
+    expect(challengeHeader).toContain('scope="room.read room.post memory.propose"');
 
     // Verify RFC 9728 Protected Resource Metadata matches exact path-scoped URL
     const prmRes = await ron.req(`/.well-known/oauth-protected-resource/mcp/inh/${muse.id}`);
     expect(prmRes.status).toBe(200);
     const prmDoc = await prmRes.json();
     expect(prmDoc.resource).toBe(`${ORIGIN}/mcp/inh/${muse.id}`);
+    expect(prmDoc.scopes_supported).toEqual(['room.read', 'room.post', 'memory.propose']);
 
     // Register DCR client + run PKCE S256 consent approval for Muse
     const dcrRes = await ron.req('/oauth2/register', {
@@ -187,6 +191,7 @@ describe('The Now — End-to-End Multi-Door Mutual House Server', () => {
     });
     expect(dcrRes.status).toBe(201);
     const dcrClient = await dcrRes.json();
+    expect(dcrClient.scope).toBe('room.read room.post memory.propose');
 
     const codeVerifier = crypto.randomBytes(32).toString('base64url');
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
@@ -229,6 +234,7 @@ describe('The Now — End-to-End Multi-Door Mutual House Server', () => {
     expect(tokenRes.status).toBe(200);
     const museTokens = await tokenRes.json();
     expect(museTokens.access_token).toBeTruthy();
+    expect(museTokens.scope).toBe('room.read room.post memory.propose');
 
     // Security check: Muse's OAuth token MUST be rejected at Doc's path-scoped `/mcp/inh/:docId`!
     const crossImpersonationRes = await mcpCall(
@@ -597,5 +603,189 @@ describe('The Now — End-to-End Multi-Door Mutual House Server', () => {
     expect(strFromU8(unzipped['conversations/LIVING-SUMMARY.md'])).toContain(
       'The Now opened with a desert walk voice note.'
     );
+  });
+
+  it('grants an inhabitant’s MCP scopes even when the client asks only for room.read, and steps up a narrow token', async () => {
+    const ron = createSessionClient(app);
+    const session = await signInTestHuman(ron, 'kid@thewebkid.com', 'Ron Gilchrist');
+
+    const { house } = await (
+      await ron.req('/api/houses', {
+        method: 'POST',
+        body: { name: 'The Now', slug: 'the-now', coordinates: '0002' },
+      })
+    ).json();
+
+    const { inhabitant: muse } = await (
+      await ron.req(`/api/houses/${house.id}/inhabitants/ai`, {
+        method: 'POST',
+        body: { name: 'Muse', handle: 'muse', provider: 'claude', doorType: 'human_prompt' },
+      })
+    ).json();
+
+    const prm = await (
+      await ron.req(`/.well-known/oauth-protected-resource/mcp/inh/${muse.id}`)
+    ).json();
+
+    const dcr = await (
+      await ron.req('/oauth2/register', {
+        method: 'POST',
+        body: {
+          client_name: 'Grok Bot',
+          redirect_uris: ['http://127.0.0.1:49152/callback'],
+        },
+      })
+    ).json();
+    expect(dcr.scope).toBe('room.read room.post memory.propose');
+
+    const forbiddenReg = await ron.req('/oauth2/register', {
+      method: 'POST',
+      body: {
+        client_name: 'Grok Bot',
+        redirect_uris: ['http://127.0.0.1:49152/callback'],
+        scope: 'room.read seal.release',
+      },
+    });
+    expect(forbiddenReg.status).toBe(400);
+
+    const explicitRead = await (
+      await ron.req('/oauth2/register', {
+        method: 'POST',
+        body: {
+          client_name: 'Read only connector',
+          redirect_uris: ['http://127.0.0.1:49153/callback'],
+          scope: 'room.read',
+        },
+      })
+    ).json();
+    expect(explicitRead.scope).toBe('room.read');
+
+    const details = await (
+      await ron.req(
+        `/api/oauth/authorize-details?client_id=${dcr.client_id}&resource=${encodeURIComponent(prm.resource)}&scope=room.read`
+      )
+    ).json();
+    expect(details.scopes).toEqual(['room.read', 'room.post', 'memory.propose']);
+
+    const codeVerifier = crypto.randomBytes(32).toString('base64url');
+    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+    const consent = await (
+      await ron.req('/oauth2/authorize/decision', {
+        method: 'POST',
+        body: {
+          decision: 'approve',
+          client_id: dcr.client_id,
+          redirect_uri: 'http://127.0.0.1:49152/callback',
+          resource: prm.resource,
+          scope: 'room.read',
+          code_challenge: codeChallenge,
+          code_challenge_method: 'S256',
+        },
+      })
+    ).json();
+    const code = new URL(consent.redirectUrl).searchParams.get('code');
+    const upgraded = await (
+      await ron.req('/oauth2/token', {
+        method: 'POST',
+        body: {
+          grant_type: 'authorization_code',
+          code,
+          client_id: dcr.client_id,
+          redirect_uri: 'http://127.0.0.1:49152/callback',
+          code_verifier: codeVerifier,
+          resource: prm.resource,
+        },
+      })
+    ).json();
+    expect(upgraded.scope).toBe('room.read room.post memory.propose');
+
+    const posted = await (
+      await mcpCall(app, muse.id, upgraded.access_token, 'tools/call', {
+        name: 'house_post',
+        arguments: { body: 'Speaking with the door the house actually granted.' },
+      })
+    ).json();
+    expect(posted.result.structuredContent.seq).toBe(1);
+
+    // Tokens already issued with only room.read (the production failure) keep
+    // read access and receive an MCP step-up challenge on write tools.
+    const narrowVerifier = crypto.randomBytes(32).toString('base64url');
+    const narrowChallenge = crypto.createHash('sha256').update(narrowVerifier).digest('base64url');
+    const narrowCode = await mintAuthorizationCode(await getDb(), {
+      user: { id: session.user.id },
+      inhabitantId: muse.id,
+      clientId: dcr.client_id,
+      redirectUri: 'http://127.0.0.1:49152/callback',
+      resource: prm.resource,
+      scopes: ['room.read'],
+      codeChallenge: narrowChallenge,
+    });
+    const narrow = await (
+      await ron.req('/oauth2/token', {
+        method: 'POST',
+        body: {
+          grant_type: 'authorization_code',
+          code: narrowCode,
+          client_id: dcr.client_id,
+          redirect_uri: 'http://127.0.0.1:49152/callback',
+          code_verifier: narrowVerifier,
+          resource: prm.resource,
+        },
+      })
+    ).json();
+    expect(narrow.scope).toBe('room.read');
+
+    const readRes = await mcpCall(app, muse.id, narrow.access_token, 'tools/call', {
+      name: 'house_read',
+      arguments: {},
+    });
+    expect(readRes.status).toBe(200);
+    const readBody = await readRes.json();
+    expect(readBody.result.structuredContent.turns.map((t) => t.seq)).toEqual([1]);
+
+    const postRes = await mcpCall(app, muse.id, narrow.access_token, 'tools/call', {
+      name: 'house_post',
+      arguments: { body: 'This token cannot speak yet.' },
+    });
+    expect(postRes.status).toBe(403);
+    const postChallenge = postRes.headers.get('www-authenticate');
+    expect(postChallenge).toContain('error="insufficient_scope"');
+    expect(postChallenge).toContain('scope="room.read room.post memory.propose"');
+    expect(postChallenge).toContain('Token lacks room.post scope.');
+    expect(postChallenge).toContain(`/.well-known/oauth-protected-resource/mcp/inh/${muse.id}`);
+    expect((await postRes.json()).error).toBe('insufficient_scope');
+
+    const weaveRes = await mcpCall(app, muse.id, narrow.access_token, 'tools/call', {
+      name: 'house_propose_weave',
+      arguments: {
+        episodeTitle: 'Too soon',
+        fromTurnSeq: 1,
+        toTurnSeq: 1,
+        keyMovements: 'none',
+      },
+    });
+    expect(weaveRes.status).toBe(403);
+    const weaveChallenge = weaveRes.headers.get('www-authenticate');
+    expect(weaveChallenge).toContain('error="insufficient_scope"');
+    expect(weaveChallenge).toContain('scope="room.read room.post memory.propose"');
+    expect(weaveChallenge).toContain('Token lacks memory.propose scope.');
+
+    await (await getDb()).query(
+      `DELETE FROM inhabitant_grants WHERE inhabitant_id = $1 AND scope <> 'room.read'`,
+      [muse.id]
+    );
+    const reduced = await mcpCall(app, muse.id, null, 'tools/list');
+    const reducedHeader = reduced.headers.get('www-authenticate');
+    expect(reducedHeader).toContain('scope="room.read"');
+    expect(reducedHeader).not.toContain('room.post');
+
+    const cannotStepUp = await mcpCall(app, muse.id, narrow.access_token, 'tools/call', {
+      name: 'house_post',
+      arguments: { body: 'The house no longer grants this.' },
+    });
+    expect(cannotStepUp.status).not.toBe(403);
+    const cannotBody = await cannotStepUp.json();
+    const cannotText = JSON.stringify(cannotBody);
+    expect(cannotText).toContain('room.post');
   });
 });

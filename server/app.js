@@ -20,6 +20,7 @@ import {
   sendHouseInviteEmailIfConfigured,
 } from './auth/session-auth.js';
 import {
+  advertisedMcpScopes,
   buildAuthServerMetadata,
   buildInhabitantProtectedResourceMetadata,
   buildInhabitantResourceUrl,
@@ -27,11 +28,12 @@ import {
   extractInhabitantIdFromResource,
   getOAuthJwksDocument,
   getOriginUrl,
+  loadLiveInhabitantScopes,
   mintAuthorizationCode,
   mintInhabitantApiKeyInDb,
   registerDynamicOAuthClient,
   resolveOAuthClient,
-  sanitizeRequestedMcpScopes,
+  scopesGrantedForMcpConsent,
   verifyDirectRunnerBearer,
 } from './auth/mcp-oauth.js';
 import {
@@ -121,7 +123,12 @@ export function createServerApp() {
       return c.json({ error: 'Unknown AI inhabitant resource.' }, 404);
     }
     const originUrl = getOriginUrl(c.req.url);
-    const doc = buildInhabitantProtectedResourceMetadata(originUrl, rows[0]);
+    const liveScopes = await loadLiveInhabitantScopes(db, inhId);
+    const doc = buildInhabitantProtectedResourceMetadata(
+      originUrl,
+      rows[0],
+      advertisedMcpScopes(liveScopes)
+    );
     return c.json(doc);
   });
 
@@ -188,7 +195,8 @@ export function createServerApp() {
     }
 
     const client = await resolveOAuthClient(db, clientId);
-    const scopes = sanitizeRequestedMcpScopes(rawScope);
+    const liveScopes = await loadLiveInhabitantScopes(db, inhRow.id);
+    const scopes = scopesGrantedForMcpConsent(rawScope, liveScopes);
     const canonicalResource = buildInhabitantResourceUrl(originUrl, inhRow.id);
 
     return c.json({
@@ -244,7 +252,8 @@ export function createServerApp() {
       return c.json({ error: 'redirect_uri is not registered for this client.' }, 400);
     }
 
-    const scopes = sanitizeRequestedMcpScopes(body.scope || '');
+    const liveScopes = await loadLiveInhabitantScopes(db, inhRow.id);
+    const scopes = scopesGrantedForMcpConsent(body.scope || '', liveScopes);
     const canonicalResource = buildInhabitantResourceUrl(originUrl, inhRow.id);
 
     const code = await mintAuthorizationCode(db, {

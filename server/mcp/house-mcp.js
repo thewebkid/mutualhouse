@@ -5,7 +5,13 @@ import {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { INHABITANT_GRANTS } from '../../shared/models/inhabitant.js';
-import { createInhabitantTokenVerifier } from '../auth/mcp-oauth.js';
+import {
+  advertisedMcpScopes,
+  createInhabitantTokenVerifier,
+  loadLiveInhabitantScopes,
+  mcpScopeStepUp,
+  rewriteBearerChallengeScopes,
+} from '../auth/mcp-oauth.js';
 import { hydrateHouseForViewer } from '../services/house-service.js';
 import {
   executeRoomCommand,
@@ -126,6 +132,13 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
     expectedInhabitantId: inhabitantId,
   });
 
+  // The gate only requires room.read, so a token issued before this fix can
+  // still enter and read. MCP clients treat the 401 `scope` parameter as the
+  // complete authorization request, so that challenge advertises every scope
+  // this inhabitant is entitled to — not only room.read.
+  const liveScopes = await loadLiveInhabitantScopes(db, inhabitantId);
+  const advertisedScopes = advertisedMcpScopes(liveScopes);
+
   const gate = requireBearerAuth({
     verifier: verifierCfg.verifier,
     expectedResource: verifierCfg.expectedResource,
@@ -135,7 +148,7 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
 
   const authOrChallenge = await gate(request);
   if (authOrChallenge instanceof Response) {
-    return authOrChallenge;
+    return rewriteBearerChallengeScopes(authOrChallenge, advertisedScopes);
   }
   const authInfo = authOrChallenge;
   const doorType = authInfo.extra?.doorType || 'mcp_oauth';
@@ -416,6 +429,7 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
             destructiveHint: false,
             openWorldHint: false,
           },
+          scopeChallenge: mcpScopeStepUp(INHABITANT_GRANTS.ROOM_POST, liveScopes),
         },
         async ({
           roomSlug,
@@ -519,6 +533,7 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
             destructiveHint: false,
             openWorldHint: false,
           },
+          scopeChallenge: mcpScopeStepUp(INHABITANT_GRANTS.MEMORY_PROPOSE, liveScopes),
         },
         async (args) => {
           if (!authInfo.scopes.includes(INHABITANT_GRANTS.MEMORY_PROPOSE)) {

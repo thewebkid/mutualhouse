@@ -26,6 +26,134 @@ export const ALLOWED_MCP_SCOPES = Object.freeze([
   INHABITANT_GRANTS.MEMORY_PROPOSE,
 ]);
 
+/**
+ * Human steward privileges. An MCP connector must never be able to request these,
+ * even by naming them in the authorization or registration request.
+ */
+const FORBIDDEN_MCP_SCOPES = Object.freeze([
+  INHABITANT_GRANTS.SEAL_RELEASE,
+  INHABITANT_GRANTS.ROOM_PAUSE,
+  INHABITANT_GRANTS.MEMORY_CONFIRM,
+  INHABITANT_GRANTS.CONSTITUTION_RATIFY,
+  INHABITANT_GRANTS.CREDENTIAL_REVOKE,
+  INHABITANT_GRANTS.HOUSE_MANAGE,
+]);
+
+export function parseScopeList(rawScope) {
+  const text = Array.isArray(rawScope) ? rawScope.join(' ') : String(rawScope || '');
+  return text
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function rejectForbiddenMcpScopes(scopes) {
+  for (const scope of scopes) {
+    if (FORBIDDEN_MCP_SCOPES.includes(scope)) {
+      throw new Error(`Scope "${scope}" is human-only and never granted to MCP connectors.`);
+    }
+  }
+}
+
+/** Live inhabitant grants that an MCP token is allowed to carry, in stable order. */
+export function entitledMcpScopes(liveScopes = []) {
+  const granted = new Set(liveScopes);
+  return ALLOWED_MCP_SCOPES.filter((scope) => granted.has(scope));
+}
+
+/**
+ * Scopes to advertise on a Bearer challenge.
+ * When the inhabitant has MCP grants, advertise exactly those — clients treat
+ * the challenge `scope` as authoritative and will not also request
+ * `scopes_supported`. When nothing is known yet (unknown id, or no grants
+ * loaded), advertise the full catalog so a connector is not stuck on `room.read`.
+ */
+export function advertisedMcpScopes(liveScopes = []) {
+  const entitled = entitledMcpScopes(liveScopes);
+  return entitled.length ? entitled : [...ALLOWED_MCP_SCOPES];
+}
+
+/**
+ * Scopes delegated when a human approves an MCP connector.
+ * Human-only scopes are rejected. The grant is whatever this inhabitant is
+ * entitled to, not the narrower set a client echoed from an old challenge.
+ */
+export function scopesGrantedForMcpConsent(rawScopeString, liveScopes = []) {
+  rejectForbiddenMcpScopes(parseScopeList(rawScopeString));
+  const entitled = entitledMcpScopes(liveScopes);
+  if (!entitled.length) {
+    throw new Error('This AI inhabitant has no MCP grants to delegate.');
+  }
+  return entitled;
+}
+
+/**
+ * Dynamic Client Registration `scope`.
+ * Omitted or empty requests default to every supported MCP scope. An explicit
+ * subset of supported scopes is preserved. Forbidden scopes are rejected.
+ */
+export function scopesForDynamicClientRegistration(rawScope) {
+  const requested = parseScopeList(rawScope);
+  if (!requested.length) return [...ALLOWED_MCP_SCOPES];
+  rejectForbiddenMcpScopes(requested);
+  const allowed = ALLOWED_MCP_SCOPES.filter((scope) => requested.includes(scope));
+  return allowed.length ? allowed : [...ALLOWED_MCP_SCOPES];
+}
+
+/**
+ * Per-tool step-up. Returns the inhabitant's full entitled scope set when the
+ * token is missing a scope they are allowed to hold, so a client that replaces
+ * (rather than unions) its scopes does not drop `room.read` on the way to
+ * `room.post`. Returns undefined when the token is sufficient, or when the
+ * inhabitant is not entitled (re-auth cannot help; the tool handler explains).
+ */
+export function mcpScopeStepUp(requiredScope, liveOrEntitledScopes = []) {
+  const entitled = entitledMcpScopes(liveOrEntitledScopes);
+  return ({ authInfo } = {}) => {
+    const held = Array.isArray(authInfo?.scopes) ? authInfo.scopes : [];
+    if (held.includes(requiredScope)) return undefined;
+    if (!entitled.includes(requiredScope)) return undefined;
+    return {
+      scopes: entitled,
+      errorDescription: `Token lacks ${requiredScope} scope.`,
+    };
+  };
+}
+
+/**
+ * Replace the `scope` parameter on a Bearer `WWW-Authenticate` challenge.
+ * `requireBearerAuth` copies `requiredScopes` into that parameter, and the
+ * gate only requires `room.read` so read tools keep working. Callers pass the
+ * inhabitant's advertised scopes so the 401 (and a gate-level 403) tells
+ * clients to request the whole door.
+ */
+export function rewriteBearerChallengeScopes(response, scopes) {
+  if (!(response instanceof Response)) return response;
+  const scopesToAdvertise = Array.isArray(scopes) ? scopes.filter(Boolean) : [];
+  if (!scopesToAdvertise.length) return response;
+  const current = response.headers.get('www-authenticate');
+  if (!current) return response;
+
+  const scopeParam = `scope="${scopesToAdvertise.join(' ')}"`;
+  let next = current;
+  if (/\bscope="[^"]*"/.test(current)) {
+    next = current.replace(/\bscope="[^"]*"/, scopeParam);
+  } else if (/\bresource_metadata="/.test(current)) {
+    next = current.replace(/\bresource_metadata="/, `${scopeParam}, resource_metadata="`);
+  } else {
+    next = `${current}, ${scopeParam}`;
+  }
+  if (next === current) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set('www-authenticate', next);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export function getOriginUrl(reqUrl) {
   const u = new URL(reqUrl);
   return `${u.protocol}//${u.host}`;
@@ -55,14 +183,19 @@ export function buildAuthServerMetadata(originUrl) {
  * Builds RFC 9728 Protected Resource Metadata strictly for `/mcp/inh/:inhabitantId`
  * so `resource` equals the exact path-scoped inhabitant URL.
  */
-export function buildInhabitantProtectedResourceMetadata(originUrl, inhabitant) {
+export function buildInhabitantProtectedResourceMetadata(
+  originUrl,
+  inhabitant,
+  scopesSupported = ALLOWED_MCP_SCOPES
+) {
   const resourceUrl = new URL(buildInhabitantResourceUrl(originUrl, inhabitant.id));
   const isLocal =
     resourceUrl.hostname === 'localhost' || resourceUrl.hostname === '127.0.0.1';
+  const scopes = scopesSupported?.length ? [...scopesSupported] : [...ALLOWED_MCP_SCOPES];
   return buildOAuthProtectedResourceMetadata({
     oauthMetadata: buildAuthServerMetadata(originUrl),
     resourceServerUrl: resourceUrl,
-    scopesSupported: [...ALLOWED_MCP_SCOPES],
+    scopesSupported: scopes,
     resourceName: `Mutual House · ${inhabitant.name}`,
     dangerouslyAllowInsecureIssuerUrl: isLocal,
   });
@@ -150,6 +283,7 @@ export async function registerDynamicOAuthClient(db, body = {}) {
     body.token_endpoint_auth_method === 'client_secret_post' ? 'client_secret_post' : 'none';
   const clientId = randomOpaqueToken('mhc', 16);
   const clientSecret = authMethod === 'client_secret_post' ? randomOpaqueToken('mhs', 24) : null;
+  const scopes = scopesForDynamicClientRegistration(body.scope);
 
   await db.query(
     `INSERT INTO oauth_clients (
@@ -172,6 +306,7 @@ export async function registerDynamicOAuthClient(db, body = {}) {
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: authMethod,
+    scope: scopes.join(' '),
   };
 }
 
@@ -184,31 +319,6 @@ export function extractInhabitantIdFromResource(resourceUrl = '') {
     const m = String(resourceUrl).match(/\/mcp\/inh\/([^/?#]+)/);
     return m ? decodeURIComponent(m[1]) : null;
   }
-}
-
-export function sanitizeRequestedMcpScopes(rawScopeString = '') {
-  const requested = String(rawScopeString || '')
-    .split(/\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  // Reject any attempt by an MCP client to ask for human-only scopes!
-  const forbidden = [
-    INHABITANT_GRANTS.SEAL_RELEASE,
-    INHABITANT_GRANTS.ROOM_PAUSE,
-    INHABITANT_GRANTS.MEMORY_CONFIRM,
-    INHABITANT_GRANTS.CONSTITUTION_RATIFY,
-    INHABITANT_GRANTS.CREDENTIAL_REVOKE,
-    INHABITANT_GRANTS.HOUSE_MANAGE,
-  ];
-  for (const s of requested) {
-    if (forbidden.includes(s)) {
-      throw new Error(`Scope "${s}" is human-only and never granted to MCP connectors.`);
-    }
-  }
-
-  const allowed = requested.filter((s) => ALLOWED_MCP_SCOPES.includes(s));
-  return allowed.length ? allowed : [...ALLOWED_MCP_SCOPES];
 }
 
 export async function mintAuthorizationCode(
