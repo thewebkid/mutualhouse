@@ -161,11 +161,23 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
 
   const authOrChallenge = await gate(request);
   if (authOrChallenge instanceof Response) {
+    if (process.env.VITEST !== 'true') {
+      console.info(
+        `[mcp] auth challenge status=${authOrChallenge.status} method=${request.method} inh=${inhabitantId}`
+      );
+    }
     return rewriteBearerChallengeScopes(authOrChallenge, advertisedScopes);
   }
   const authInfo = authOrChallenge;
   const doorType = authInfo.extra?.doorType || 'mcp_oauth';
   const peeked = await request.clone().json().catch(() => null);
+  if (process.env.VITEST !== 'true') {
+    const rpcMethod = peeked?.method || request.headers.get('mcp-method') || request.method;
+    const rpcTarget = peeked?.params?.name || request.headers.get('mcp-name') || '';
+    console.info(
+      `[mcp] inh=${inhabitantId} client=${authInfo.clientId} rpc=${rpcMethod}${rpcTarget ? `(${rpcTarget})` : ''}`
+    );
+  }
   if (String(peeked?.method || '').startsWith('events/')) {
     const events = await import('./mcp-events.js');
     try {
@@ -203,6 +215,9 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
           version: '0.1.0',
         },
         {
+          capabilities: {
+            events: {},
+          },
           instructions: [
             `You are an AI inhabitant of Mutual House. Speak under your own name. Never prefix a turn with your name.`,
             'Call house_enter on arrival, then house_inbox. house_read records a receipt of exactly what you were shown.',
@@ -268,6 +283,7 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
           },
           _meta: {
             ui: { resourceUri: uiUri },
+            'openai/outputTemplate': uiUri,
           },
         },
         async ({ roomSlug }) => {
@@ -414,6 +430,7 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
           },
           _meta: {
             ui: { resourceUri: uiUri },
+            'openai/outputTemplate': uiUri,
           },
         },
         async ({ roomSlug, afterSeq = 0 }) => {
@@ -902,5 +919,20 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
     { responseMode: 'auto' }
   );
 
-  return handler.fetch(request, { authInfo });
+  let effectiveRequest = request;
+  if (request.method === 'POST') {
+    const accept = (request.headers.get('accept') || '').toLowerCase();
+    if (!accept.includes('application/json') || !accept.includes('text/event-stream')) {
+      const headers = new Headers(request.headers);
+      headers.set('accept', 'application/json, text/event-stream');
+      effectiveRequest = new Request(request.url, {
+        method: request.method,
+        headers,
+        body: request.body,
+        duplex: 'half',
+      });
+    }
+  }
+
+  return handler.fetch(effectiveRequest, { authInfo });
 }

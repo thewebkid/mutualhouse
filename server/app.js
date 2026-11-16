@@ -273,6 +273,7 @@ export function createServerApp() {
 
     const redirectTarget = new URL(redirectUri);
     if (body.state) redirectTarget.searchParams.set('state', String(body.state));
+    redirectTarget.searchParams.set('iss', originUrl);
 
     if (body.decision !== 'approve') {
       redirectTarget.searchParams.set('error', 'access_denied');
@@ -363,8 +364,19 @@ export function createServerApp() {
         params,
         clientSecret,
       });
+      if (process.env.VITEST !== 'true') {
+        console.info(
+          `[mcp-oauth] token issued grant=${params.grant_type || '?'} client=${params.client_id || '(assertion)'} scopes="${tokens.scope || ''}"`
+        );
+      }
       return c.json(tokens);
     } catch (err) {
+      if (process.env.VITEST !== 'true') {
+        const code = err instanceof OAuthError ? err.code : 'invalid_request';
+        console.warn(
+          `[mcp-oauth] token rejected grant=${params.grant_type || '?'} client=${params.client_id || '(none)'} assertion=${Boolean(params.client_assertion)} error=${code} desc=${JSON.stringify(err?.message || '')}`
+        );
+      }
       if (err instanceof OAuthError) {
         return c.json({ error: err.code, error_description: err.message }, 400);
       }

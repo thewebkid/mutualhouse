@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { createLocalJWKSet, decodeJwt, jwtVerify } from 'jose';
 import {
   buildOAuthProtectedResourceMetadata,
   getOAuthProtectedResourceMetadataUrl,
@@ -163,6 +164,24 @@ export function buildInhabitantResourceUrl(originUrl, inhabitantId) {
   return `${originUrl}/mcp/inh/${encodeURIComponent(inhabitantId)}`;
 }
 
+const CLIENT_ASSERTION_TYPE_JWT_BEARER =
+  'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
+
+const SUPPORTED_CLIENT_ASSERTION_ALGS = Object.freeze([
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512',
+  'EdDSA',
+]);
+
+const CIMD_REVALIDATE_MS = 60 * 60 * 1000;
+
 export function buildAuthServerMetadata(originUrl) {
   return {
     issuer: originUrl,
@@ -172,7 +191,14 @@ export function buildAuthServerMetadata(originUrl) {
     jwks_uri: `${originUrl}/.well-known/jwks.json`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
-    token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
+    token_endpoint_auth_methods_supported: [
+      'none',
+      'client_secret_post',
+      'client_secret_basic',
+      'private_key_jwt',
+    ],
+    token_endpoint_auth_signing_alg_values_supported: [...SUPPORTED_CLIENT_ASSERTION_ALGS],
+    authorization_response_iss_parameter_supported: true,
     code_challenge_methods_supported: ['S256'],
     scopes_supported: [...ALLOWED_MCP_SCOPES],
     client_id_metadata_document_supported: true,
@@ -201,35 +227,71 @@ export function buildInhabitantProtectedResourceMetadata(
   });
 }
 
+const _remoteJwksCache = new Map();
+const JWKS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function mapOAuthClientRow(row) {
+  const method = row.token_endpoint_auth_method || 'none';
+  const supported = Array.isArray(row.token_endpoint_auth_methods_supported)
+    ? row.token_endpoint_auth_methods_supported
+    : [method];
+  return {
+    clientId: row.client_id,
+    name: row.client_name,
+    redirectUris: row.redirect_uris ?? [],
+    tokenEndpointAuthMethod: method,
+    authMethodsSupported: supported.length ? supported : [method],
+    jwksUri: row.jwks_uri || null,
+    jwks: row.jwks || null,
+    metadataUrl: row.metadata_url || null,
+    clientSecretHash: row.client_secret_hash || null,
+  };
+}
+
 /**
  * Resolves an OAuth 2.1 client via:
  *  1. Pre-registered or DCR row in `oauth_clients`
- *  2. MCP `2026-07-28` Client ID Metadata Document (`@better-auth/cimd` validators)
+ *  2. MCP `2026-07-28` Client ID Metadata Document (`@better-auth/cimd` validators + MCP SEP-3149)
  */
 export async function resolveOAuthClient(db, clientId) {
   if (!clientId) return null;
   const { rows } = await db.query(`SELECT * FROM oauth_clients WHERE client_id = $1 LIMIT 1`, [
     clientId,
   ]);
-  if (rows[0]) {
-    return {
-      clientId: rows[0].client_id,
-      name: rows[0].client_name,
-      redirectUris: rows[0].redirect_uris ?? [],
-      tokenEndpointAuthMethod: rows[0].token_endpoint_auth_method,
-    };
+  const existing = rows[0] || null;
+  const isCimd = isCimdClientIdUrlCandidate(clientId);
+
+  if (existing && !isCimd) {
+    return mapOAuthClientRow(existing);
   }
 
-  if (isCimdClientIdUrlCandidate(clientId)) {
+  if (isCimd) {
+    const fetchedAtMs = existing?.metadata_fetched_at
+      ? new Date(existing.metadata_fetched_at).getTime()
+      : 0;
+    if (existing && fetchedAtMs > 0 && Date.now() - fetchedAtMs < CIMD_REVALIDATE_MS) {
+      return mapOAuthClientRow(existing);
+    }
+
     const urlErr = validateClientIdUrl(clientId);
     if (urlErr) throw new Error(`Invalid CIMD client_id URL: ${urlErr}`);
 
-    const res = await fetch(clientId, {
-      redirect: 'error',
-      headers: { accept: 'application/json' },
-    });
-    if (!res.ok) throw new Error(`Failed to fetch CIMD metadata (${res.status})`);
-    const rawJson = await res.json();
+    let rawJson;
+    try {
+      const res = await fetch(clientId, {
+        redirect: 'error',
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`Failed to fetch CIMD metadata (${res.status})`);
+      rawJson = await res.json();
+    } catch (fetchErr) {
+      if (existing && fetchedAtMs > 0) {
+        return mapOAuthClientRow(existing);
+      }
+      throw fetchErr;
+    }
+
     const checked = validateCimdMetadata(clientId, rawJson, {
       metadataProfile: 'mcp-2026-07-28',
     });
@@ -238,27 +300,45 @@ export async function resolveOAuthClient(db, clientId) {
     }
 
     const meta = checked.metadata;
-    await db.query(
+    // MCP SEP-3149: ChatGPT publishes plural `token_endpoint_auth_methods_supported`
+    // alongside singular `token_endpoint_auth_method` during the transition.
+    const rawSupported = Array.isArray(rawJson?.token_endpoint_auth_methods_supported)
+      ? rawJson.token_endpoint_auth_methods_supported.filter(
+          (m) => m === 'none' || m === 'private_key_jwt'
+        )
+      : null;
+    const authMethod = meta.token_endpoint_auth_method || rawSupported?.[0] || 'none';
+    const supportedMethods = rawSupported?.length
+      ? [...new Set([...rawSupported, authMethod])]
+      : [authMethod];
+
+    const { rows: upserted } = await db.query(
       `INSERT INTO oauth_clients (
-        client_id, client_name, redirect_uris, token_endpoint_auth_method, metadata_url
-      ) VALUES ($1,$2,$3::jsonb,$4,$5)
+        client_id, client_name, redirect_uris, token_endpoint_auth_method,
+        token_endpoint_auth_methods_supported, metadata_url, jwks_uri, jwks, metadata_fetched_at
+      ) VALUES ($1,$2,$3::jsonb,$4,$5::jsonb,$6,$7,$8::jsonb,NOW())
       ON CONFLICT (client_id) DO UPDATE
         SET client_name = EXCLUDED.client_name,
-            redirect_uris = EXCLUDED.redirect_uris`,
+            redirect_uris = EXCLUDED.redirect_uris,
+            token_endpoint_auth_method = EXCLUDED.token_endpoint_auth_method,
+            token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+            metadata_url = EXCLUDED.metadata_url,
+            jwks_uri = EXCLUDED.jwks_uri,
+            jwks = EXCLUDED.jwks,
+            metadata_fetched_at = NOW()
+      RETURNING *`,
       [
         clientId,
         meta.client_name || clientId,
         JSON.stringify(meta.redirect_uris || []),
-        meta.token_endpoint_auth_method || 'none',
+        authMethod,
+        JSON.stringify(supportedMethods),
         clientId,
+        meta.jwks_uri || null,
+        meta.jwks ? JSON.stringify(meta.jwks) : null,
       ]
     );
-    return {
-      clientId,
-      name: meta.client_name || clientId,
-      redirectUris: meta.redirect_uris || [],
-      tokenEndpointAuthMethod: meta.token_endpoint_auth_method || 'none',
-    };
+    return mapOAuthClientRow(upserted[0]);
   }
 
   // Fallback public PKCE client auto-registration for consumer connectors passing simple client_ids
@@ -267,6 +347,11 @@ export async function resolveOAuthClient(db, clientId) {
     name: clientId,
     redirectUris: [],
     tokenEndpointAuthMethod: 'none',
+    authMethodsSupported: ['none'],
+    jwksUri: null,
+    jwks: null,
+    metadataUrl: null,
+    clientSecretHash: null,
   };
 }
 
@@ -280,23 +365,45 @@ export async function registerDynamicOAuthClient(db, body = {}) {
     throw new Error('redirect_uris is required for Dynamic Client Registration.');
   }
   const requestedMethod = String(body.token_endpoint_auth_method || 'none');
-  const authMethod = ['client_secret_post', 'client_secret_basic'].includes(requestedMethod)
+  const authMethod = ['client_secret_post', 'client_secret_basic', 'private_key_jwt'].includes(
+    requestedMethod
+  )
     ? requestedMethod
     : 'none';
+
+  const jwksUri = body.jwks_uri ? String(body.jwks_uri) : null;
+  const jwks = body.jwks && typeof body.jwks === 'object' ? body.jwks : null;
+  if (authMethod === 'private_key_jwt' && !jwksUri && !jwks) {
+    throw new Error('private_key_jwt registration requires jwks_uri or jwks.');
+  }
+  if (jwksUri) {
+    const parsedJwks = new URL(jwksUri);
+    if (parsedJwks.protocol !== 'https:') {
+      throw new Error('jwks_uri must use HTTPS.');
+    }
+  }
+
   const clientId = randomOpaqueToken('mhc', 16);
-  const clientSecret = authMethod === 'none' ? null : randomOpaqueToken('mhs', 24);
+  const clientSecret =
+    authMethod === 'client_secret_post' || authMethod === 'client_secret_basic'
+      ? randomOpaqueToken('mhs', 24)
+      : null;
   const scopes = scopesForDynamicClientRegistration(body.scope);
 
   await db.query(
     `INSERT INTO oauth_clients (
-      client_id, client_secret_hash, client_name, redirect_uris, token_endpoint_auth_method
-    ) VALUES ($1,$2,$3,$4::jsonb,$5)`,
+      client_id, client_secret_hash, client_name, redirect_uris,
+      token_endpoint_auth_method, token_endpoint_auth_methods_supported, jwks_uri, jwks
+    ) VALUES ($1,$2,$3,$4::jsonb,$5,$6::jsonb,$7,$8::jsonb)`,
     [
       clientId,
       clientSecret ? sha256HexNode(clientSecret) : null,
       clientName,
       JSON.stringify(redirectUris),
       authMethod,
+      JSON.stringify([authMethod]),
+      jwksUri,
+      jwks ? JSON.stringify(jwks) : null,
     ]
   );
 
@@ -308,6 +415,7 @@ export async function registerDynamicOAuthClient(db, body = {}) {
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: authMethod,
+    ...(jwksUri ? { jwks_uri: jwksUri } : {}),
     scope: scopes.join(' '),
   };
 }
@@ -328,18 +436,197 @@ export function classifyResourceParam(rawResource = '', originUrl = '') {
   return { kind: 'inhabitant', inhabitantId };
 }
 
-async function assertClientSecret(db, clientId, presentedSecret, required) {
-  if (!required) return;
-  const { rows } = await db.query(
-    `SELECT client_secret_hash, token_endpoint_auth_method FROM oauth_clients WHERE client_id = $1`,
-    [clientId]
-  );
-  const row = rows[0];
-  const method = row?.token_endpoint_auth_method || 'none';
-  if (method === 'none') return;
-  if (!presentedSecret || !row?.client_secret_hash || sha256HexNode(presentedSecret) !== row.client_secret_hash) {
-    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Client authentication failed.');
+async function fetchClientJwksDocument(jwksUri, { forceRefresh = false } = {}) {
+  const parsed = new URL(jwksUri);
+  if (parsed.protocol !== 'https:') {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Client jwks_uri must use HTTPS.');
   }
+  if (!forceRefresh) {
+    const cached = _remoteJwksCache.get(jwksUri);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.jwks;
+    }
+  }
+  const res = await fetch(jwksUri, {
+    redirect: 'error',
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) {
+    throw new OAuthError(
+      OAuthErrorCode.InvalidClient,
+      `Failed to fetch client JWKS (${res.status}).`
+    );
+  }
+  const jwks = await res.json();
+  if (!jwks || !Array.isArray(jwks.keys)) {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Client JWKS document has no keys array.');
+  }
+  _remoteJwksCache.set(jwksUri, { jwks, expiresAt: Date.now() + JWKS_CACHE_TTL_MS });
+  return jwks;
+}
+
+async function verifyPrivateKeyJwtAssertion(db, { client, originUrl, assertion, assertionType }) {
+  if (assertionType !== CLIENT_ASSERTION_TYPE_JWT_BEARER) {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Unsupported client_assertion_type.');
+  }
+
+  let unverified;
+  try {
+    unverified = decodeJwt(assertion);
+  } catch {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Malformed client_assertion JWT.');
+  }
+
+  const subOrIss = String(unverified.sub || unverified.iss || '');
+  if (!subOrIss || subOrIss !== client.clientId) {
+    throw new OAuthError(
+      OAuthErrorCode.InvalidClient,
+      'client_assertion sub/iss does not match client_id.'
+    );
+  }
+
+  const normalizedOrigin = originUrl.replace(/\/+$/, '');
+  const acceptedAudiences = [
+    ...new Set([`${normalizedOrigin}/oauth2/token`, normalizedOrigin, `${normalizedOrigin}/`]),
+  ];
+  const verifyOptions = {
+    issuer: client.clientId,
+    subject: client.clientId,
+    audience: acceptedAudiences,
+    algorithms: [...SUPPORTED_CLIENT_ASSERTION_ALGS],
+  };
+
+  let jwksDoc = client.jwks && Array.isArray(client.jwks.keys) ? client.jwks : null;
+  if (!jwksDoc) {
+    if (!client.jwksUri) {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidClient,
+        'Client has no jwks or jwks_uri for private_key_jwt.'
+      );
+    }
+    jwksDoc = await fetchClientJwksDocument(client.jwksUri);
+  }
+
+  let payload;
+  try {
+    ({ payload } = await jwtVerify(assertion, createLocalJWKSet(jwksDoc), verifyOptions));
+  } catch (err) {
+    if (client.jwksUri && /no matching key|no applicable key/i.test(String(err?.message || ''))) {
+      try {
+        const refreshed = await fetchClientJwksDocument(client.jwksUri, { forceRefresh: true });
+        ({ payload } = await jwtVerify(assertion, createLocalJWKSet(refreshed), verifyOptions));
+      } catch {
+        throw new OAuthError(
+          OAuthErrorCode.InvalidClient,
+          'Client assertion signature verification failed.'
+        );
+      }
+    } else {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidClient,
+        'Client assertion signature verification failed.'
+      );
+    }
+  }
+
+  if (typeof payload.exp !== 'number') {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Client assertion requires exp claim.');
+  }
+  if (typeof payload.iat === 'number' && payload.exp - payload.iat > 3600) {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Client assertion lifetime is too long.');
+  }
+
+  if (typeof payload.jti === 'string' && payload.jti.trim()) {
+    await db.query(`DELETE FROM oauth_client_assertions WHERE expires_at <= NOW()`);
+    const jtiHash = sha256HexNode(`${client.clientId}:${payload.jti}`);
+    const expiresIso = new Date(payload.exp * 1000).toISOString();
+    const { rows } = await db.query(
+      `INSERT INTO oauth_client_assertions (jti_hash, client_id, expires_at)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (jti_hash) DO NOTHING
+       RETURNING jti_hash`,
+      [jtiHash, client.clientId, expiresIso]
+    );
+    if (!rows[0]) {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidClient,
+        'Client assertion jti has already been used.'
+      );
+    }
+  }
+}
+
+async function authenticateTokenEndpointClient(
+  db,
+  { clientId, originUrl, params = {}, clientSecret = '' }
+) {
+  let client;
+  try {
+    client = await resolveOAuthClient(db, clientId);
+  } catch (err) {
+    throw new OAuthError(
+      OAuthErrorCode.InvalidClient,
+      err?.message || 'Unable to resolve OAuth client.'
+    );
+  }
+  if (!client) {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Unknown OAuth client.');
+  }
+
+  const hasAssertion = Boolean(params.client_assertion || params.client_assertion_type);
+  if (hasAssertion) {
+    if (!params.client_assertion || !params.client_assertion_type) {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidClient,
+        'Both client_assertion and client_assertion_type are required.'
+      );
+    }
+    const allowsJwt =
+      client.tokenEndpointAuthMethod === 'private_key_jwt' ||
+      client.authMethodsSupported.includes('private_key_jwt');
+    if (!allowsJwt) {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidClient,
+        'Client is not registered for private_key_jwt authentication.'
+      );
+    }
+    await verifyPrivateKeyJwtAssertion(db, {
+      client,
+      originUrl,
+      assertion: String(params.client_assertion),
+      assertionType: String(params.client_assertion_type),
+    });
+    return { client, methodUsed: 'private_key_jwt' };
+  }
+
+  const method = client.tokenEndpointAuthMethod || 'none';
+  if (method === 'client_secret_basic' || method === 'client_secret_post') {
+    if (
+      !clientSecret ||
+      !client.clientSecretHash ||
+      sha256HexNode(clientSecret) !== client.clientSecretHash
+    ) {
+      throw new OAuthError(OAuthErrorCode.InvalidClient, 'Client authentication failed.');
+    }
+    return { client, methodUsed: method };
+  }
+
+  if (method === 'private_key_jwt') {
+    // MCP SEP-3149: a CIMD client whose `token_endpoint_auth_methods_supported`
+    // includes `none` may authenticate as a public PKCE client when intersecting
+    // against server metadata. A client registered strictly for `private_key_jwt`
+    // without `none` in `token_endpoint_auth_methods_supported` MUST present an assertion.
+    if (client.authMethodsSupported.includes('none') && !clientSecret) {
+      return { client, methodUsed: 'none' };
+    }
+    throw new OAuthError(
+      OAuthErrorCode.InvalidClient,
+      'Client registered for private_key_jwt must present client_assertion.'
+    );
+  }
+
+  return { client, methodUsed: 'none' };
 }
 
 export function extractInhabitantIdFromResource(resourceUrl = '') {
@@ -415,7 +702,12 @@ export async function exchangeOAuthToken(db, { originUrl, grantType, params, cli
     if (params.client_id && params.client_id !== codeRow.client_id) {
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'client_id mismatch.');
     }
-    await assertClientSecret(db, codeRow.client_id, clientSecret || params.client_secret, true);
+    await authenticateTokenEndpointClient(db, {
+      clientId: codeRow.client_id,
+      originUrl,
+      params,
+      clientSecret: clientSecret || params.client_secret || '',
+    });
 
     // Verify PKCE S256 code_verifier
     const verifier = String(params.code_verifier || '');
@@ -481,7 +773,15 @@ export async function exchangeOAuthToken(db, { originUrl, grantType, params, cli
     if (refreshResource.kind === 'invalid' || (refreshResource.kind === 'inhabitant' && params.resource !== tokRow.resource)) {
       throw new OAuthError(OAuthErrorCode.InvalidTarget, 'Cannot change resource on refresh.');
     }
-    await assertClientSecret(db, tokRow.client_id, clientSecret || params.client_secret, true);
+    if (params.client_id && params.client_id !== tokRow.client_id) {
+      throw new OAuthError(OAuthErrorCode.InvalidClient, 'client_id mismatch.');
+    }
+    await authenticateTokenEndpointClient(db, {
+      clientId: tokRow.client_id,
+      originUrl,
+      params,
+      clientSecret: clientSecret || params.client_secret || '',
+    });
 
     await db.query(`UPDATE oauth_tokens SET revoked_at = NOW() WHERE id = $1`, [tokRow.id]);
 

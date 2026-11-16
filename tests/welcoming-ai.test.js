@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
+import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetDbForTests } from '../server/db/index.js';
+import { getDb, resetDbForTests } from '../server/db/index.js';
 import { createServerApp } from '../server/app.js';
 import { getAiHost, normalizeBearerSecret, wakeHostFor } from '../shared/lib/ai-hosts.js';
 import { formatClaudeRoutineBody } from '../server/services/invocations.js';
@@ -310,5 +311,260 @@ describe('Welcoming AI onboarding', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(fetchMock).toHaveBeenCalled();
     fetchMock.mockRestore();
+  });
+
+  it('completes ChatGPT CIMD OAuth with RS256 private_key_jwt, SEP-3149 fallback, and MCP Events discovery', async () => {
+    const ron = createSessionClient(app);
+    await signIn(ron, 'ron@example.com', 'Ron');
+    const house = await (
+      await ron.req('/api/houses', { method: 'POST', body: { name: 'The Now', slug: 'chatgpt-cimd' } })
+    ).json();
+    const { inhabitant } = await (
+      await ron.req(`/api/houses/${house.house.id}/inhabitants/ai`, {
+        method: 'POST',
+        body: { name: 'GPT', hostKind: 'chatgpt' },
+      })
+    ).json();
+
+    const { publicKey, privateKey } = await generateKeyPair('RS256');
+    const pubJwk = await exportJWK(publicKey);
+    pubJwk.kid = 'cimd-chatgpt-test';
+    pubJwk.alg = 'RS256';
+    pubJwk.use = 'sig';
+
+    const cimdUrl = 'https://chatgpt.com/oauth/aNOwki9LQfX3/client.json';
+    const jwksUri = 'https://chatgpt.com/oauth/jwks.json';
+    const redirectUri = 'https://chatgpt.com/connector/oauth/aNOwki9LQfX3';
+    const resourceUrl = `${ORIGIN}/mcp/inh/${inhabitant.id}`;
+
+    // Seed a legacy cached CIMD row (metadata_fetched_at = NULL, jwks_uri = NULL) matching prod state
+    const db = await getDb();
+    await db.query(
+      `INSERT INTO oauth_clients (client_id, client_name, redirect_uris, token_endpoint_auth_method, metadata_url)
+       VALUES ($1, 'ChatGPT', $2::jsonb, 'private_key_jwt', $1)`,
+      [cimdUrl, JSON.stringify([redirectUri])]
+    );
+
+    const strictCimdUrl = 'https://strict.example.com/oauth/client.json';
+    const strictRedirectUri = 'https://strict.example.com/oauth/callback';
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      const href = String(url);
+      if (href === cimdUrl) {
+        return new Response(
+          JSON.stringify({
+            client_id: cimdUrl,
+            client_uri: 'https://chatgpt.com/',
+            redirect_uris: [redirectUri],
+            token_endpoint_auth_method: 'private_key_jwt',
+            token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
+            grant_types: ['authorization_code', 'refresh_token'],
+            response_types: ['code'],
+            client_name: 'ChatGPT',
+            token_endpoint_auth_signing_alg: 'RS256',
+            jwks_uri: jwksUri,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      if (href === strictCimdUrl) {
+        return new Response(
+          JSON.stringify({
+            client_id: strictCimdUrl,
+            client_uri: 'https://strict.example.com/',
+            redirect_uris: [strictRedirectUri],
+            token_endpoint_auth_method: 'private_key_jwt',
+            grant_types: ['authorization_code', 'refresh_token'],
+            response_types: ['code'],
+            client_name: 'Strict Client',
+            token_endpoint_auth_signing_alg: 'RS256',
+            jwks_uri: jwksUri,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      if (href === jwksUri) {
+        return new Response(JSON.stringify({ keys: [pubJwk] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${href}`);
+    });
+
+    try {
+      const asMeta = await (await ron.req('/.well-known/oauth-authorization-server')).json();
+      expect(asMeta.token_endpoint_auth_methods_supported).toContain('private_key_jwt');
+      expect(asMeta.authorization_response_iss_parameter_supported).toBe(true);
+
+      // 1) RS256 private_key_jwt token exchange + jti replay protection
+      const verifier1 = crypto.randomBytes(32).toString('base64url');
+      const challenge1 = crypto.createHash('sha256').update(verifier1).digest('base64url');
+      const decision1 = await (
+        await ron.req('/oauth2/authorize/decision', {
+          method: 'POST',
+          body: {
+            decision: 'approve',
+            client_id: cimdUrl,
+            redirect_uri: redirectUri,
+            resource: resourceUrl,
+            state: 'st1',
+            code_challenge: challenge1,
+            code_challenge_method: 'S256',
+          },
+        })
+      ).json();
+      const redir1 = new URL(decision1.redirectUrl);
+      expect(redir1.searchParams.get('iss')).toBe(ORIGIN);
+      const code1 = redir1.searchParams.get('code');
+
+      const now = Math.floor(Date.now() / 1000);
+      const assertion1 = await new SignJWT({})
+        .setProtectedHeader({ alg: 'RS256', kid: pubJwk.kid })
+        .setIssuer(cimdUrl)
+        .setSubject(cimdUrl)
+        .setAudience(`${ORIGIN}/oauth2/token`)
+        .setJti('jti-chatgpt-1')
+        .setIssuedAt(now)
+        .setExpirationTime(now + 120)
+        .sign(privateKey);
+
+      const form1 = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code1,
+        redirect_uri: redirectUri,
+        code_verifier: verifier1,
+        resource: resourceUrl,
+        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        client_assertion: assertion1,
+      });
+      const tokRes1 = await app.fetch(
+        new Request(`${ORIGIN}/oauth2/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: form1.toString(),
+        })
+      );
+      expect(tokRes1.status).toBe(200);
+      const tok1 = await tokRes1.json();
+      expect(tok1.access_token).toBeTruthy();
+
+      // Replaying the same client_assertion jti on refresh_token must be rejected
+      const replayRes = await app.fetch(
+        new Request(`${ORIGIN}/oauth2/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: tok1.refresh_token,
+            client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+            client_assertion: assertion1,
+          }).toString(),
+        })
+      );
+      expect(replayRes.status).toBe(400);
+      expect((await replayRes.json()).error).toBe('invalid_client');
+
+      // MCP 2026-07-28 server/discover + legacy Accept: application/json initialize + events/list
+      const discoverRes = await mcp(app, inhabitant.id, tok1.access_token, 'server/discover');
+      expect(discoverRes.status).toBe(200);
+      const discoverJson = await discoverRes.json();
+      expect(discoverJson.result.capabilities.events).toEqual({});
+
+      const legacyInit = await app.fetch(
+        new Request(resourceUrl, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${tok1.access_token}`,
+            'content-type': 'application/json',
+            accept: 'application/json',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: {
+              protocolVersion: '2025-11-25',
+              capabilities: {},
+              clientInfo: { name: 'ChatGPT', version: '1.0' },
+            },
+          }),
+        })
+      );
+      expect(legacyInit.status).toBe(200);
+
+      const evList = await (await mcp(app, inhabitant.id, tok1.access_token, 'events/list')).json();
+      expect(evList.result.events[0].inputSchema.type).toBe('object');
+      expect(evList.result.events[0].payloadSchema.type).toBe('object');
+
+      // 2) MCP SEP-3149 fallback: `none` PKCE succeeds when CIMD `token_endpoint_auth_methods_supported` includes `none`
+      const verifier2 = crypto.randomBytes(32).toString('base64url');
+      const challenge2 = crypto.createHash('sha256').update(verifier2).digest('base64url');
+      const decision2 = await (
+        await ron.req('/oauth2/authorize/decision', {
+          method: 'POST',
+          body: {
+            decision: 'approve',
+            client_id: cimdUrl,
+            redirect_uri: redirectUri,
+            resource: resourceUrl,
+            code_challenge: challenge2,
+            code_challenge_method: 'S256',
+          },
+        })
+      ).json();
+      const code2 = new URL(decision2.redirectUrl).searchParams.get('code');
+      const tokRes2 = await app.fetch(
+        new Request(`${ORIGIN}/oauth2/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: cimdUrl,
+            code: code2,
+            redirect_uri: redirectUri,
+            code_verifier: verifier2,
+            resource: resourceUrl,
+          }).toString(),
+        })
+      );
+      expect(tokRes2.status).toBe(200);
+
+      // 3) Strict private_key_jwt CIMD client WITHOUT `none` in supported methods rejects missing assertion
+      const verifier3 = crypto.randomBytes(32).toString('base64url');
+      const challenge3 = crypto.createHash('sha256').update(verifier3).digest('base64url');
+      const decision3 = await (
+        await ron.req('/oauth2/authorize/decision', {
+          method: 'POST',
+          body: {
+            decision: 'approve',
+            client_id: strictCimdUrl,
+            redirect_uri: strictRedirectUri,
+            resource: resourceUrl,
+            code_challenge: challenge3,
+            code_challenge_method: 'S256',
+          },
+        })
+      ).json();
+      const code3 = new URL(decision3.redirectUrl).searchParams.get('code');
+      const tokRes3 = await app.fetch(
+        new Request(`${ORIGIN}/oauth2/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: strictCimdUrl,
+            code: code3,
+            redirect_uri: strictRedirectUri,
+            code_verifier: verifier3,
+            resource: resourceUrl,
+          }).toString(),
+        })
+      );
+      expect(tokRes3.status).toBe(400);
+      expect((await tokRes3.json()).error).toBe('invalid_client');
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 });

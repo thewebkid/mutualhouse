@@ -122,8 +122,19 @@ CREATE TABLE IF NOT EXISTS oauth_clients (
   client_name TEXT NOT NULL,
   redirect_uris JSONB NOT NULL DEFAULT '[]'::jsonb,
   token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none',
+  token_endpoint_auth_methods_supported JSONB,
   grant_types JSONB NOT NULL DEFAULT '["authorization_code","refresh_token"]'::jsonb,
   metadata_url TEXT,
+  jwks_uri TEXT,
+  jwks JSONB,
+  metadata_fetched_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS oauth_client_assertions (
+  jti_hash TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -435,4 +446,9 @@ CREATE TABLE IF NOT EXISTS inhabitant_invocations (
 CREATE INDEX IF NOT EXISTS idx_invocations_pending
   ON inhabitant_invocations (inhabitant_id, source_event_seq)
   WHERE acked_at IS NULL;
+
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS token_endpoint_auth_methods_supported JSONB;
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS jwks_uri TEXT;
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS jwks JSONB;
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS metadata_fetched_at TIMESTAMPTZ;
 `;

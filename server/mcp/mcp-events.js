@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { decryptSecret, encryptSecret, randomId } from '../services/crypto.js';
+import { decryptSecret, encryptSecret, randomId, sha256HexNode } from '../services/crypto.js';
 
 const EVENT_NAME = 'mutualhouse.invocation';
 
@@ -31,6 +31,23 @@ export async function listMcpEvents() {
         name: EVENT_NAME,
         description: 'A room mention, authorized-auto wake, or tempo pulse for this inhabitant.',
         delivery: ['webhook'],
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+        },
+        payloadSchema: {
+          type: 'object',
+          properties: {
+            invocationId: { type: 'string' },
+            reason: { type: 'string' },
+            inhabitantId: { type: 'string' },
+            room: { type: 'object' },
+            turn: { type: ['object', 'null'] },
+          },
+          required: ['invocationId', 'reason', 'inhabitantId'],
+          additionalProperties: true,
+        },
       },
     ],
   };
@@ -45,36 +62,44 @@ export async function subscribeMcpEvent(db, { houseId, inhabitantId, params }) {
   if (!isPublicHttps(url)) throw new Error('Callback URL must be public https.');
   if (!String(secret || '').startsWith('whsec_')) throw new Error('Signing secret must start with whsec_.');
 
+  const deterministicId = `sub_${sha256HexNode(`${inhabitantId}:${name}:${url}`).slice(0, 24)}`;
   const challenge = randomId('ver');
   const verifyBody = JSON.stringify({ type: 'verification', challenge });
   const timestamp = String(Math.floor(Date.now() / 1000));
   const webhookId = `msg_${challenge}`;
   const response = await fetch(url, {
     method: 'POST',
+    redirect: 'error',
     headers: {
       'content-type': 'application/json',
       'webhook-id': webhookId,
       'webhook-timestamp': timestamp,
       'webhook-signature': signStandardWebhook(secret, webhookId, timestamp, verifyBody),
+      'x-mcp-subscription-id': deterministicId,
     },
     body: verifyBody,
     signal: AbortSignal.timeout(4000),
   });
   const echoed = await response.json().catch(() => ({}));
-  if (!response.ok || (echoed.challenge && echoed.challenge !== challenge)) {
+  if (!response.ok || echoed.challenge !== challenge) {
     throw new Error('Webhook verification failed.');
   }
 
-  const id = randomId('sub');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  await db.query(
+  const { rows } = await db.query(
     `INSERT INTO mcp_event_subscriptions (id, house_id, inhabitant_id, event_name, callback_url, encrypted_secret, expires_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (inhabitant_id, event_name, callback_url)
-     DO UPDATE SET encrypted_secret = EXCLUDED.encrypted_secret, expires_at = EXCLUDED.expires_at`,
-    [id, houseId, inhabitantId, name, url, encryptSecret(secret), expiresAt]
+     DO UPDATE SET encrypted_secret = EXCLUDED.encrypted_secret, expires_at = EXCLUDED.expires_at
+     RETURNING id`,
+    [deterministicId, houseId, inhabitantId, name, url, encryptSecret(secret), expiresAt]
   );
-  return { id, refreshBefore: expiresAt, cursor: null };
+  return {
+    id: rows[0]?.id || deterministicId,
+    refreshBefore: expiresAt,
+    cursor: null,
+    truncated: false,
+  };
 }
 
 export async function unsubscribeMcpEvent(db, { inhabitantId, params }) {
@@ -98,6 +123,7 @@ export async function dispatchMcpEventSubscriptions(db, targets, context) {
     const payload = {
       eventId: target.id,
       name: EVENT_NAME,
+      timestamp: new Date().toISOString(),
       data: {
         invocationId: target.id,
         reason: target.reason,
@@ -105,6 +131,7 @@ export async function dispatchMcpEventSubscriptions(db, targets, context) {
         turn: context.turn,
         inhabitantId: target.inhabitantId,
       },
+      cursor: null,
     };
     const rawBody = JSON.stringify(payload);
     const timestamp = String(Math.floor(Date.now() / 1000));
