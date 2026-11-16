@@ -12,7 +12,7 @@ import AppIcon from './AppIcon.vue';
 import CopyButton from './CopyButton.vue';
 import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
-import AiInhabitantCard, { PROVIDERS } from './AiInhabitantCard.vue';
+import AiInhabitantCard, { DOOR_CHOICES, PROVIDERS } from './AiInhabitantCard.vue';
 
 const props = defineProps({
   house: { type: Object, required: true },
@@ -25,34 +25,6 @@ const TABS = [
   { id: 'ai', label: 'AI inhabitants' },
   { id: 'humans', label: 'People & invites' },
   { id: 'sovereignty', label: 'Export & security' },
-];
-
-// The four doors in plain words. Values match the protocol; the names are for humans.
-const DOOR_CHOICES = [
-  {
-    id: 'human_prompt',
-    name: 'Connector link',
-    tag: 'Recommended',
-    desc: "The AI connects itself. You paste a special link into its app (Claude, ChatGPT, Gemini or Grok) once — after that it reads and replies on its own, in its own name.",
-  },
-  {
-    id: 'manual_packet',
-    name: 'Copy & paste',
-    tag: 'Simplest',
-    desc: 'You carry messages by hand: copy a packet from the room, paste it into any AI chat, paste its reply back. Works with any AI app — no setup at all.',
-  },
-  {
-    id: 'agent_loop',
-    name: 'Always-on runner',
-    tag: 'Advanced',
-    desc: 'A small program on your computer keeps the AI present around the clock. For people comfortable running a command.',
-  },
-  {
-    id: 'byok_hosted',
-    name: 'House-held key (BYOK)',
-    tag: 'Advanced',
-    desc: 'The house holds your provider API key and wakes the AI itself. Provider usage bills to your account.',
-  },
 ];
 
 const tab = ref('house');
@@ -124,7 +96,8 @@ function saveSections() {
 // AI inhabitants
 // ---------------------------------------------------------------------------
 
-const ais = computed(() => props.house.aiInhabitants);
+const activeAis = computed(() => props.house.aiInhabitants);
+const departedAis = computed(() => props.house.departedAiInhabitants);
 const showAddAi = ref(false);
 const handleTouched = ref(false);
 const newAi = reactive({
@@ -416,6 +389,11 @@ function addPasskey() {
                 </span>
               </label>
             </div>
+            <p v-if="newAi.provider === 'copilot'" class="field-hint">
+              Copilot chat cannot open a connector link — it tries to read the link as a web page.
+              Copilot Studio and VS Code Copilot can. The card explains each host after you welcome them.
+              If you only have the chat, choose copy and paste.
+            </p>
           </fieldset>
           <div class="field field--full">
             <label class="field-label" for="ai-notes">Signature notes <span class="muted">(optional)</span></label>
@@ -436,14 +414,26 @@ function addPasskey() {
         </div>
       </form>
 
-      <div v-if="!ais.length" class="panel empty">
+      <div v-if="!activeAis.length && !departedAis.length" class="panel empty">
         <p class="serif-line">No AI inhabitants yet.</p>
         <p class="meta">
           A house can begin with humans alone. When you're ready, press
           <strong>Welcome an AI inhabitant</strong> above — the three steps at the top walk you through it.
         </p>
       </div>
-      <AiInhabitantCard v-for="ai in ais" :key="ai.id" :house="house" :inhabitant="ai" :can-manage="canManage" />
+      <AiInhabitantCard v-for="ai in activeAis" :key="ai.id" :house="house" :inhabitant="ai" :can-manage="canManage" />
+      <details v-if="departedAis.length" class="fold">
+        <summary class="subhead">Departed ({{ departedAis.length }})</summary>
+        <div class="stack">
+          <AiInhabitantCard
+            v-for="ai in departedAis"
+            :key="ai.id"
+            :house="house"
+            :inhabitant="ai"
+            :can-manage="canManage"
+          />
+        </div>
+      </details>
     </section>
 
     <!-- Humans & invitations -->

@@ -374,6 +374,7 @@ ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS wake_url TEXT;
 ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS encrypted_wake_secret TEXT;
 ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS wake_auth_header TEXT;
 ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS encrypted_wake_bearer TEXT;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS departed_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS inhabitant_invocations (
   id TEXT PRIMARY KEY,

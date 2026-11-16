@@ -108,6 +108,7 @@ export class Inhabitant {
   }
 
   get presenceLabel() {
+    if (this.departedAt) return 'Departed';
     if (this.presence === 'participating') return 'Actively participating';
     if (this.presence === 'connected') return 'Connected';
     return 'Available to invoke';
@@ -159,6 +160,8 @@ export class AiInhabitant extends Inhabitant {
     'hasWakeBearer',
     'mcpEndpointPath',
     'activeKeyPrefixes',
+    'hasOAuthConnection',
+    'departedAt',
   ];
 
   kind = 'ai';
@@ -175,6 +178,8 @@ export class AiInhabitant extends Inhabitant {
   wakeAuthHeader = null;
   hasWakeBearer = false;
   activeKeyPrefixes = [];
+  hasOAuthConnection = false;
+  departedAt = null;
 
   constructor(def = {}, house = null) {
     super({ ...def, kind: 'ai' }, house);
@@ -192,6 +197,8 @@ export class AiInhabitant extends Inhabitant {
     this.hasWakeSecret = Boolean(def.hasWakeSecret);
     this.wakeAuthHeader = def.wakeAuthHeader ?? null;
     this.hasWakeBearer = Boolean(def.hasWakeBearer);
+    this.hasOAuthConnection = Boolean(def.hasOAuthConnection);
+    this.departedAt = def.departedAt ?? null;
     this.mcpEndpointPath =
       def.mcpEndpointPath ?? (this.id ? `/mcp/inh/${this.id}` : null);
     this.activeKeyPrefixes = Array.isArray(def.activeKeyPrefixes)
@@ -236,6 +243,9 @@ export function defaultProviderDisclosure(provider = 'custom') {
   }
   if (p === 'gemini' || p === 'google') {
     return 'Processed via Google Gemini; note that Google consumer Connected Apps require Keep Activity enabled.';
+  }
+  if (p === 'copilot' || p === 'microsoft') {
+    return 'Processed via Microsoft Copilot; subject to the steward’s Microsoft account and tenant data controls.';
   }
   return 'Processed by an external AI model under the steward’s configured provider terms.';
 }

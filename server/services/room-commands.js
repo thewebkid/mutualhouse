@@ -222,7 +222,7 @@ export async function executeRoomCommand(
       const bodyHash = await sha256Hex(body);
       const { rows: aiRows } = await tx.query(
         `SELECT id, kind, name, handle, arrival_number AS "arrivalNumber"
-         FROM inhabitants WHERE house_id = $1 AND kind = 'ai'`,
+         FROM inhabitants WHERE house_id = $1 AND kind = 'ai' AND departed_at IS NULL`,
         [houseId]
       );
       const invokedIds = mergeAddressedAiIds(

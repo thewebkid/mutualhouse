@@ -27,7 +27,9 @@ const rooms = computed(() => props.house.activeRooms);
 const ais = computed(() => props.house.aiInhabitants);
 // Alphabetical, so no one is listed first for standing
 const inhabitants = computed(() =>
-  [...props.house.inhabitants].sort((a, b) => a.name.localeCompare(b.name))
+  [...props.house.inhabitants]
+    .filter((i) => !i.departedAt)
+    .sort((a, b) => a.name.localeCompare(b.name))
 );
 const otherHouses = computed(() => globalState.myHouses.filter((h) => h.slug !== props.house.slug));
 const isDark = computed(() => ui.theme === 'dark');

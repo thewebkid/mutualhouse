@@ -185,6 +185,13 @@ describe('Isomorphic becise-style Domain Models', () => {
     expect(doc.can(INHABITANT_GRANTS.ROOM_POST)).toBe(true);
     expect(doc.can(INHABITANT_GRANTS.SEAL_RELEASE)).toBe(false);
 
+    const departed = House.create(sampleHouseDef());
+    departed.getInhabitant('muse').departedAt = '2026-11-15T00:00:00.000Z';
+    expect(departed.aiInhabitants.map((i) => i.handle)).toEqual(['doc']);
+    expect(departed.departedAiInhabitants.map((i) => i.handle)).toEqual(['muse']);
+    expect(departed.getInhabitant('muse').name).toBe('Muse');
+    expect(departed.getInhabitant('muse').presenceLabel).toBe('Departed');
+
     // Round-trip plain serialization without parent pointer cycles
     const serialized = getDef(house);
     const json = JSON.stringify(serialized);
