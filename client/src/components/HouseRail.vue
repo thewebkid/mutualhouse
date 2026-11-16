@@ -1,12 +1,15 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import { slugify } from '@shared/lib/model-util.js';
-import { globalState, toggleTheme } from '../lib/state.js';
-import { createRoomInHouse } from '../lib/mut/house-orchestration.js';
+import { canInviteAi, canManageAi } from '@shared/models/inhabitant.js';
+import { globalState, showError, showNotice, toggleTheme } from '../lib/state.js';
+import { createRoomInHouse, setInhabitantParticipation } from '../lib/mut/house-orchestration.js';
 import AppIcon from './AppIcon.vue';
 import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
+import InhabitantProfileModal from './InhabitantProfileModal.vue';
+import WelcomeAiModal from './WelcomeAiModal.vue';
 
 const props = defineProps({
   house: { type: Object, required: true },
@@ -72,6 +75,140 @@ async function createRoom() {
     globalState.errorBanner = err.message;
   } finally {
     creating.value = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Welcoming an AI, profiles, and the per-inhabitant menu
+// ---------------------------------------------------------------------------
+
+// Tending one AI is the default allowance; stewards of the house may welcome more
+const canAdd = computed(() => canInviteAi(viewer.value, props.house));
+
+const welcomeOpen = ref(false);
+const welcomeTarget = ref(null);
+const profileOpen = ref(false);
+const profileTarget = ref(null);
+
+function openWelcome(existing = null) {
+  closeMenu();
+  ui.mobileNavOpen = false;
+  welcomeTarget.value = existing;
+  welcomeOpen.value = true;
+}
+
+function openProfile(inh) {
+  closeMenu();
+  ui.mobileNavOpen = false;
+  profileTarget.value = inh;
+  profileOpen.value = true;
+}
+
+const menu = ref(null); // { inh, x, y }
+const menuEl = ref(null);
+
+const menuActions = computed(() => {
+  const inh = menu.value?.inh;
+  if (!inh) return [];
+  const v = viewer.value;
+  const actions = [{ id: 'profile', label: 'View profile' }];
+  if (inh.id === v?.id && canAdd.value) actions.push({ id: 'add', label: 'Add AI' });
+  if (inh.isAi && canManageAi(v, inh)) {
+    if (!inh.participationLocked || v.can('house.manage')) {
+      actions.push({
+        id: 'participation',
+        label: inh.participationMode === 'readonly' ? 'Switch to contribute' : 'Switch to read-only',
+      });
+    }
+    actions.push({ id: 'connection', label: 'Connection & webhook' });
+  }
+  actions.push({ id: 'handle', label: 'Copy @handle' });
+  return actions;
+});
+
+function placeMenu(inh, x, y) {
+  const width = 232;
+  const height = 16 + 40 * 5;
+  menu.value = {
+    inh,
+    x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
+    y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
+  };
+  document.addEventListener('pointerdown', onMenuPointer);
+  document.addEventListener('keydown', onMenuKey);
+  window.addEventListener('scroll', closeMenu, { capture: true });
+  window.addEventListener('resize', closeMenu);
+  nextTick(() => menuEl.value?.querySelector('button')?.focus());
+}
+
+function openMenuAt(inh, ev) {
+  placeMenu(inh, ev.clientX, ev.clientY);
+}
+
+function openMenuFrom(inh, ev) {
+  if (menu.value?.inh.id === inh.id) {
+    closeMenu();
+    return;
+  }
+  const rect = ev.currentTarget.getBoundingClientRect();
+  placeMenu(inh, rect.left, rect.bottom + 4);
+}
+
+function closeMenu() {
+  menu.value = null;
+  document.removeEventListener('pointerdown', onMenuPointer);
+  document.removeEventListener('keydown', onMenuKey);
+  window.removeEventListener('scroll', closeMenu, { capture: true });
+  window.removeEventListener('resize', closeMenu);
+}
+
+function onMenuPointer(ev) {
+  if (menuEl.value?.contains(ev.target)) return;
+  // The ⋯ button toggles the menu itself
+  if (ev.target.closest?.('[data-menu-button]')) return;
+  closeMenu();
+}
+
+function onMenuKey(ev) {
+  if (ev.key === 'Escape') closeMenu();
+}
+
+onBeforeUnmount(closeMenu);
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+  }
+}
+
+async function runAction(action) {
+  const inh = menu.value?.inh;
+  closeMenu();
+  if (!inh) return;
+  try {
+    if (action === 'profile') openProfile(inh);
+    else if (action === 'add') openWelcome();
+    else if (action === 'connection') openWelcome(inh);
+    else if (action === 'participation') {
+      const mode = inh.participationMode === 'readonly' ? 'contribute' : 'readonly';
+      await setInhabitantParticipation(inh.id, { mode });
+      showNotice(mode === 'readonly' ? `${inh.name} now reads only.` : `${inh.name} can contribute.`);
+    } else if (action === 'handle') {
+      await copyText(`@${inh.handle}`);
+      showNotice(`Copied @${inh.handle}.`);
+    }
+  } catch (err) {
+    showError(err.message);
   }
 }
 
@@ -204,20 +341,40 @@ function inhabitantTitle(inh) {
       </span>
     </h3>
     <ul class="list-plain">
-      <li v-for="i in inhabitants" :key="i.id" class="rail-item" :title="inhabitantTitle(i)">
+      <li
+        v-for="i in inhabitants"
+        :key="i.id"
+        class="rail-item"
+        :title="inhabitantTitle(i)"
+        @contextmenu.prevent="openMenuAt(i, $event)"
+      >
         <InhabitantMark small :inhabitant="i" />
         <span class="rail-item-text">
           <span>{{ i.name }}<template v-if="viewer?.id === i.id"> (you)</template></span>
           <small>{{ inhabitantKind(i) }}</small>
         </span>
         <span class="presence-dot" :class="presenceClass(i)" :aria-label="i.presenceLabel"></span>
+        <button
+          type="button"
+          class="icon-btn icon-btn--sm"
+          data-menu-button
+          aria-haspopup="menu"
+          :aria-expanded="menu?.inh.id === i.id"
+          :aria-label="`Actions for ${i.name}`"
+          @click.stop="openMenuFrom(i, $event)"
+        >
+          <AppIcon name="more" />
+        </button>
       </li>
     </ul>
     <div v-if="!ais.length" class="rail-invite">
       <p>No AI inhabitants yet.</p>
-      <button type="button" class="btn btn--sm btn--primary" @click="setView('housekeeping')">
-        <AppIcon name="plus" /> Welcome your first AI
+      <button v-if="canAdd" type="button" class="btn btn--sm btn--primary" @click="openWelcome()">
+        <AppIcon name="plus" /> Add AI
       </button>
+    </div>
+    <div v-else-if="canAdd" class="rail-add">
+      <button type="button" class="quiet-btn" @click="openWelcome()"><AppIcon name="plus" /> Add AI</button>
     </div>
   </section>
 
@@ -232,6 +389,24 @@ function inhabitantTitle(inh) {
       <AppIcon :name="isDark ? 'sun' : 'moon'" />
     </button>
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="menu"
+      ref="menuEl"
+      class="context-menu"
+      role="menu"
+      :aria-label="`Actions for ${menu.inh.name}`"
+      :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
+    >
+      <button v-for="a in menuActions" :key="a.id" type="button" role="menuitem" @click="runAction(a.id)">
+        {{ a.label }}
+      </button>
+    </div>
+  </Teleport>
+
+  <WelcomeAiModal :house="house" :open="welcomeOpen" :inhabitant="welcomeTarget" @close="welcomeOpen = false" />
+  <InhabitantProfileModal :house="house" :open="profileOpen" :inhabitant="profileTarget" @close="profileOpen = false" />
 </template>
 
 <style lang="scss" scoped>
@@ -260,6 +435,10 @@ function inhabitantTitle(inh) {
   p {
     margin: 0;
   }
+}
+
+.rail-add {
+  padding: var(--space-1) var(--space-2) 0;
 }
 
 .rail-head .field {

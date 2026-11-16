@@ -535,6 +535,9 @@ export async function executeRoomCommand(
 
   if (webhookDelivery) {
     dispatchInvocationWebhooks(webhookDelivery.webhookTargets, webhookDelivery.context);
+    import('../mcp/mcp-events.js')
+      .then((m) => m.dispatchMcpEventSubscriptions(db, webhookDelivery.created, webhookDelivery.context))
+      .catch(() => {});
   }
 
   // Door 4 reads the same invocation rows as Door 2, including authorized_auto.

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api } from '../lib/api.js';
 import { globalState } from '../lib/state.js';
+import { getAiHost } from '@shared/lib/ai-hosts.js';
 import PorchHeader from '../components/PorchHeader.vue';
 import InhabitantMark from '../components/InhabitantMark.vue';
 
@@ -32,12 +33,25 @@ const query = computed(() => {
   return out;
 });
 
-const inhabitant = computed(() => details.value?.inhabitant ?? null);
-const house = computed(() => details.value?.house ?? null);
+// With a generic resource, the server lists every AI this person tends. More than one means they choose.
+const candidates = computed(() => details.value?.candidates ?? []);
+const needsChoice = computed(() => details.value?.lockedResource === false && candidates.value.length > 1);
+const selectedId = ref('');
+const chosen = computed(() => candidates.value.find((c) => c.inhabitant?.id === selectedId.value) ?? null);
+// The one the door will open for: the pick when there is a choice, otherwise what the server settled on
+const target = computed(() => (needsChoice.value ? chosen.value : details.value));
+
+const inhabitant = computed(() => target.value?.inhabitant ?? null);
+const house = computed(() => target.value?.house ?? null);
+const awaitingChoice = computed(() => needsChoice.value && !chosen.value);
+
+function hostLabel(candidate) {
+  return getAiHost(candidate.inhabitant?.hostKind).label;
+}
 const clientName = computed(
   () => details.value?.client?.name ?? details.value?.clientName ?? query.value.client_id ?? 'An MCP client'
 );
-const resourceUrl = computed(() => details.value?.resource ?? query.value.resource ?? '');
+const resourceUrl = computed(() => target.value?.resource ?? query.value.resource ?? '');
 const inhabitantTitle = computed(() => {
   const inh = inhabitant.value;
   if (!inh) return 'an AI inhabitant';
@@ -45,7 +59,7 @@ const inhabitantTitle = computed(() => {
   return `${inh.name} ${pad}`;
 });
 const scopes = computed(() => {
-  const fromDetails = details.value?.scopes;
+  const fromDetails = target.value?.scopes;
   const raw = Array.isArray(fromDetails) ? fromDetails : String(query.value.scope ?? '').split(/\s+/);
   return raw.filter(Boolean);
 });
@@ -66,6 +80,7 @@ async function decide(decision) {
   try {
     const res = await api.approveOAuthConsent({
       ...query.value,
+      ...(chosen.value ? { resource: chosen.value.resource, inhabitant_id: chosen.value.inhabitant.id } : {}),
       scope: scopes.value.join(' '),
       decision,
     });
@@ -104,44 +119,64 @@ async function decide(decision) {
 
         <section v-else class="card">
           <p class="eyebrow">Door 1 · MCP connector consent</p>
-          <h1>Open a door for {{ inhabitantTitle }}?</h1>
-          <p class="muted">
+          <h1 v-if="awaitingChoice">Which AI is this for?</h1>
+          <h1 v-else>Open a door for {{ inhabitantTitle }}?</h1>
+          <p v-if="awaitingChoice" class="muted">
+            <strong>{{ clientName }}</strong> wants to connect, and you tend more than one AI. Choose the one it will
+            speak as. The token it receives is locked to that one inhabitant's path, so it can never speak as anyone else.
+          </p>
+          <p v-else class="muted">
             <strong>{{ clientName }}</strong> is asking to act as this AI inhabitant inside
             <strong>{{ house?.name ?? 'your house' }}</strong>. The token it receives is locked to this one inhabitant's
             path, so it can never speak as anyone else.
           </p>
 
-          <div class="panel panel--sunken stack stack--tight">
-            <div class="row">
-              <InhabitantMark :inhabitant="{ ...inhabitant, kind: 'ai', initials: inhabitant?.name?.[0] ?? 'A' }" />
-              <div class="row-grow">
-                <p class="label">{{ inhabitantTitle }}</p>
-                <p class="meta">
-                  {{ inhabitant?.provider ?? 'AI' }}
-                  <template v-if="house?.coordinates"> · Locality {{ house.coordinates }}</template>
-                </p>
-              </div>
-              <span class="badge badge--accent">AI inhabitant</span>
+          <fieldset v-if="needsChoice" class="field">
+            <legend class="visually-hidden">AI inhabitants you tend</legend>
+            <div class="choice-grid">
+              <label v-for="c in candidates" :key="c.inhabitant.id" class="choice">
+                <input v-model="selectedId" type="radio" name="oauth-candidate" :value="c.inhabitant.id" />
+                <span class="toggle-text">
+                  {{ c.inhabitant.name }}
+                  <small>{{ c.house.name }} · {{ hostLabel(c) }}</small>
+                </span>
+              </label>
             </div>
-            <p v-if="resourceUrl" class="mono muted">{{ resourceUrl }}</p>
-            <p v-if="inhabitant?.providerDisclosure" class="meta">{{ inhabitant.providerDisclosure }}</p>
-          </div>
+          </fieldset>
 
-          <h2 class="subhead">It will be able to</h2>
-          <ul class="list-plain stack stack--tight">
-            <li v-for="s in scopes" :key="s" class="toggle-row">
-              <span class="badge badge--primary mono">{{ s }}</span>
-              <span class="toggle-text">{{ SCOPE_TEXT[s] ?? 'Additional permission requested by the client.' }}</span>
-            </li>
-          </ul>
+          <template v-if="!awaitingChoice">
+            <div class="panel panel--sunken stack stack--tight">
+              <div class="row">
+                <InhabitantMark :inhabitant="{ ...inhabitant, kind: 'ai', initials: inhabitant?.name?.[0] ?? 'A' }" />
+                <div class="row-grow">
+                  <p class="label">{{ inhabitantTitle }}</p>
+                  <p class="meta">
+                    {{ inhabitant?.provider ?? 'AI' }}
+                    <template v-if="house?.coordinates"> · Locality {{ house.coordinates }}</template>
+                  </p>
+                </div>
+                <span class="badge badge--accent">AI inhabitant</span>
+              </div>
+              <p v-if="resourceUrl" class="mono muted">{{ resourceUrl }}</p>
+              <p v-if="inhabitant?.providerDisclosure" class="meta">{{ inhabitant.providerDisclosure }}</p>
+            </div>
 
-          <h2 class="subhead">It will never be able to</h2>
-          <ul class="list-plain stack stack--tight">
-            <li v-for="h in HUMAN_ONLY" :key="h.scope" class="toggle-row">
-              <span class="badge badge--outline mono">{{ h.scope }}</span>
-              <span class="toggle-text">{{ h.text }} — human-only, always.</span>
-            </li>
-          </ul>
+            <h2 class="subhead">It will be able to</h2>
+            <ul class="list-plain stack stack--tight">
+              <li v-for="s in scopes" :key="s" class="toggle-row">
+                <span class="badge badge--primary mono">{{ s }}</span>
+                <span class="toggle-text">{{ SCOPE_TEXT[s] ?? 'Additional permission requested by the client.' }}</span>
+              </li>
+            </ul>
+
+            <h2 class="subhead">It will never be able to</h2>
+            <ul class="list-plain stack stack--tight">
+              <li v-for="h in HUMAN_ONLY" :key="h.scope" class="toggle-row">
+                <span class="badge badge--outline mono">{{ h.scope }}</span>
+                <span class="toggle-text">{{ h.text }} — human-only, always.</span>
+              </li>
+            </ul>
+          </template>
 
           <p v-if="error" class="form-error" role="alert">{{ error }}</p>
 
@@ -149,7 +184,7 @@ async function decide(decision) {
             <button type="button" class="btn" :disabled="Boolean(deciding)" @click="decide('deny')">
               {{ deciding === 'deny' ? 'Declining…' : 'Decline' }}
             </button>
-            <button type="button" class="btn btn--primary" :disabled="Boolean(deciding)" @click="decide('approve')">
+            <button type="button" class="btn btn--primary" :disabled="Boolean(deciding) || awaitingChoice" @click="decide('approve')">
               {{ deciding === 'approve' ? 'Opening…' : 'Approve' }}
             </button>
           </div>

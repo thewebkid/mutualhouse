@@ -8,7 +8,7 @@ Mutual House shares one isomorphic ES class hierarchy (`shared/models/`) across 
 2. **Zero Server Vue Dependency (`raw()`):** `shared/lib/model-util.js` unwraps Vue proxies via duck-typing (`val?.__v_raw ?? val`) so `getDef(instance)` works identically on `reactive(House.create(def))` in Vue and raw instances in Hono.
 3. **Polymorphic `static create(def, parent)`:**
    - `House.create(def)` → aggregate root holding `inhabitants`, `rooms`, `memory`, `constitutions`.
-   - `Inhabitant.create(def, house)` → `HumanInhabitant` | `AiInhabitant`.
+   - `Inhabitant.create(def, house)` → `HumanInhabitant` | `AiInhabitant`. AI rows carry `hostKind`, `wakePreset`, and `participationMode` (`contribute` or `readonly`). Humans carry `ai.invite`. `canInviteAi` / `canManageAi` decide who may welcome and tend a companion.
    - `Room.create(def, house)` → `CommonRoom` | `ProjectRoom` | `CouncilRoom` | `PrivateRoom`.
    - `Attachment.create(def, turn)` → `AudioAttachment` | `ImageAttachment` | `PdfAttachment`.
 4. **Hydrate Snapshots, Mutate via Commands:** Never upload whole-object `house.def` to mutate shared rooms. Mutations execute through `client/src/lib/mut/house-orchestration.js` (`postTurn`, `openSeal`, `releaseSeal`, `toggleRoomPause`, `sendPulse`, `proposeWeave`, `confirmLivingSummary`, `ratifyConstitution`), sending idempotent `{ commandId, type, payload }` requests and reconciling monotonic `room_events` (`eventSeq`) in place while sorting turns by chronological `turn.seq`.

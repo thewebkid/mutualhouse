@@ -5,6 +5,7 @@ import { OAuthError } from '@modelcontextprotocol/server';
 import {
   HUMAN_MEMBER_DEFAULT_GRANTS,
   INHABITANT_GRANTS,
+  canManageAi,
 } from '../shared/models/inhabitant.js';
 import { slugify } from '../shared/lib/model-util.js';
 import { getDb } from './db/index.js';
@@ -25,6 +26,7 @@ import {
   buildInhabitantProtectedResourceMetadata,
   buildInhabitantResourceUrl,
   exchangeOAuthToken,
+  classifyResourceParam,
   extractInhabitantIdFromResource,
   getOAuthJwksDocument,
   getOriginUrl,
@@ -42,6 +44,7 @@ import {
   departAiInhabitantInDb,
   hydrateHouseForViewer,
   mapInhabitantRow,
+  setAiParticipationModeInDb,
   updateInhabitantInDb,
 } from './services/house-service.js';
 import {
@@ -68,6 +71,7 @@ import {
   joinRoomCallInDb,
   leaveRoomCallInDb,
   pollCallStateInDb,
+  presignInhabitantAvatar,
   presignRoomMediaUpload,
 } from './services/media-and-calls.js';
 import { transcribeAudioAttachmentSibling } from './services/byok-runner.js';
@@ -110,16 +114,22 @@ export function createServerApp() {
     return c.json(await getOAuthJwksDocument());
   });
 
-  app.get('/.well-known/oauth-authorization-server', (c) => {
-    const originUrl = getOriginUrl(c.req.url);
-    return c.json(buildAuthServerMetadata(originUrl));
-  });
+  function sendAuthServerMetadata(c) {
+    return c.json(buildAuthServerMetadata(getOriginUrl(c.req.url)));
+  }
+  app.get('/.well-known/oauth-authorization-server', sendAuthServerMetadata);
+  app.get('/.well-known/oauth-authorization-server/*', sendAuthServerMetadata);
+  app.get('/.well-known/openid-configuration', sendAuthServerMetadata);
+
+  app.options('/.well-known/*', (c) => c.body(null, 204));
+  app.options('/oauth2/*', (c) => c.body(null, 204));
+  app.options('/mcp/inh/:inhabitantId', (c) => c.body(null, 204));
 
   app.get('/.well-known/oauth-protected-resource/mcp/inh/:inhabitantId', async (c) => {
     const db = await getDb();
     const inhId = c.req.param('inhabitantId');
     const { rows } = await db.query(
-      `SELECT * FROM inhabitants WHERE id = $1 AND kind = 'ai' LIMIT 1`,
+      `SELECT * FROM inhabitants WHERE id = $1 AND kind = 'ai' AND departed_at IS NULL LIMIT 1`,
       [inhId]
     );
     if (!rows[0]) {
@@ -169,50 +179,85 @@ export function createServerApp() {
     const resource = c.req.query('resource') || '';
     const rawScope = c.req.query('scope') || '';
 
-    const inhId = extractInhabitantIdFromResource(resource);
-    if (!inhId) {
-      return c.json(
-        { error: 'OAuth resource parameter must target /mcp/inh/:inhabitantId.' },
-        400
-      );
-    }
-
-    const { rows: inhRows } = await db.query(
-      `SELECT i.*, h.name AS house_name, h.slug AS house_slug, h.coordinates AS house_coords
-       FROM inhabitants i
-       JOIN houses h ON h.id = i.house_id
-       WHERE i.id = $1 AND i.kind = 'ai'
-       LIMIT 1`,
-      [inhId]
-    );
-    const inhRow = inhRows[0];
-    if (!inhRow) return c.json({ error: 'AI inhabitant not found.' }, 404);
-
-    // Ensure the signed-in human is a steward of this House
-    const { rows: viewerRows } = await db.query(
-      `SELECT * FROM inhabitants WHERE house_id = $1 AND user_id = $2 AND kind = 'human' LIMIT 1`,
-      [inhRow.house_id, user.id]
-    );
-    if (!viewerRows[0]) {
-      return c.json({ error: 'You are not a human inhabitant of this House.' }, 403);
+    const classified = classifyResourceParam(resource, originUrl);
+    if (classified.kind === 'invalid') {
+      return c.json({ error: 'OAuth resource parameter must target /mcp/inh/:inhabitantId.' }, 400);
     }
 
     const client = await resolveOAuthClient(db, clientId);
-    const liveScopes = await loadLiveInhabitantScopes(db, inhRow.id);
-    const scopes = scopesGrantedForMcpConsent(rawScope, liveScopes);
-    const canonicalResource = buildInhabitantResourceUrl(originUrl, inhRow.id);
+    if (classified.kind === 'inhabitant') {
+      const { rows: inhRows } = await db.query(
+        `SELECT i.*, h.name AS house_name, h.slug AS house_slug, h.coordinates AS house_coords
+         FROM inhabitants i
+         JOIN houses h ON h.id = i.house_id
+         WHERE i.id = $1 AND i.kind = 'ai' AND i.departed_at IS NULL
+         LIMIT 1`,
+        [classified.inhabitantId]
+      );
+      const inhRow = inhRows[0];
+      if (!inhRow) return c.json({ error: 'AI inhabitant not found.' }, 404);
+      const { rows: viewerRows } = await db.query(
+        `SELECT * FROM inhabitants WHERE house_id = $1 AND user_id = $2 AND kind = 'human' LIMIT 1`,
+        [inhRow.house_id, user.id]
+      );
+      const viewer = viewerRows[0];
+      if (!viewer) return c.json({ error: 'You are not a human inhabitant of this House.' }, 403);
+      if (
+        !viewer.grants?.includes('house.manage') &&
+        viewer.id !== inhRow.steward_inhabitant_id &&
+        !viewer.is_founder
+      ) {
+        return c.json({ error: 'You do not tend this AI inhabitant.' }, 403);
+      }
+      const liveScopes = await loadLiveInhabitantScopes(db, inhRow.id);
+      const scopes = scopesGrantedForMcpConsent(rawScope, liveScopes);
+      return c.json({
+        client,
+        lockedResource: true,
+        resource: buildInhabitantResourceUrl(originUrl, inhRow.id),
+        scopes,
+        house: {
+          id: inhRow.house_id,
+          name: inhRow.house_name,
+          slug: inhRow.house_slug,
+          coordinates: inhRow.house_coords,
+        },
+        inhabitant: mapInhabitantRow(inhRow),
+      });
+    }
 
+    const { rows: candidates } = await db.query(
+      `SELECT i.*, h.name AS house_name, h.slug AS house_slug, h.coordinates AS house_coords, v.id AS viewer_id, v.grants AS viewer_grants, v.is_founder
+       FROM inhabitants i
+       JOIN houses h ON h.id = i.house_id
+       JOIN inhabitants v ON v.house_id = i.house_id AND v.user_id = $1 AND v.kind = 'human'
+       WHERE i.kind = 'ai' AND i.departed_at IS NULL`,
+      [user.id]
+    );
+    const allowed = candidates.filter(
+      (row) =>
+        row.viewer_grants?.includes?.('house.manage') ||
+        row.is_founder ||
+        row.steward_inhabitant_id === row.viewer_id
+    );
+    const mapped = [];
+    for (const row of allowed) {
+      const liveScopes = await loadLiveInhabitantScopes(db, row.id);
+      mapped.push({
+        inhabitant: mapInhabitantRow(row),
+        house: { id: row.house_id, name: row.house_name, slug: row.house_slug, coordinates: row.house_coords },
+        resource: buildInhabitantResourceUrl(originUrl, row.id),
+        scopes: scopesGrantedForMcpConsent(rawScope, liveScopes),
+      });
+    }
     return c.json({
       client,
-      resource: canonicalResource,
-      scopes,
-      house: {
-        id: inhRow.house_id,
-        name: inhRow.house_name,
-        slug: inhRow.house_slug,
-        coordinates: inhRow.house_coords,
-      },
-      inhabitant: mapInhabitantRow(inhRow),
+      lockedResource: false,
+      candidates: mapped,
+      resource: mapped[0]?.resource || '',
+      scopes: mapped[0]?.scopes || [],
+      house: mapped[0]?.house || null,
+      inhabitant: mapped[0]?.inhabitant || null,
     });
   });
 
@@ -234,11 +279,13 @@ export function createServerApp() {
       return c.json({ redirectUrl: redirectTarget.toString() });
     }
 
-    const inhId = extractInhabitantIdFromResource(body.resource || '');
-    if (!inhId) return c.json({ error: 'Invalid path-scoped resource.' }, 400);
+    const chosen = classifyResourceParam(body.resource || '', originUrl);
+    const inhId =
+      chosen.kind === 'inhabitant' ? chosen.inhabitantId : String(body.inhabitant_id || body.inhabitantId || '');
+    if (!inhId) return c.json({ error: 'Choose the AI inhabitant this connector will speak as.' }, 400);
 
     const { rows: inhRows } = await db.query(
-      `SELECT * FROM inhabitants WHERE id = $1 AND kind = 'ai' LIMIT 1`,
+      `SELECT * FROM inhabitants WHERE id = $1 AND kind = 'ai' AND departed_at IS NULL LIMIT 1`,
       [inhId]
     );
     const inhRow = inhRows[0];
@@ -248,7 +295,15 @@ export function createServerApp() {
       `SELECT * FROM inhabitants WHERE house_id = $1 AND user_id = $2 AND kind = 'human' LIMIT 1`,
       [inhRow.house_id, user.id]
     );
-    if (!viewerRows[0]) return c.json({ error: 'Forbidden.' }, 403);
+    const viewer = viewerRows[0];
+    if (!viewer) return c.json({ error: 'Forbidden.' }, 403);
+    if (
+      !viewer.grants?.includes('house.manage') &&
+      !viewer.is_founder &&
+      viewer.id !== inhRow.steward_inhabitant_id
+    ) {
+      return c.json({ error: 'Forbidden.' }, 403);
+    }
 
     const client = await resolveOAuthClient(db, String(body.client_id || 'mcp-client'));
     if (client.redirectUris.length && !client.redirectUris.includes(redirectUri)) {
@@ -286,11 +341,27 @@ export function createServerApp() {
       params = await c.req.json().catch(() => ({}));
     }
 
+    let clientSecret = params.client_secret || '';
+    const basic = c.req.header('authorization') || '';
+    if (/^basic\s+/i.test(basic)) {
+      try {
+        const decoded = Buffer.from(basic.replace(/^basic\s+/i, ''), 'base64').toString('utf8');
+        const splitAt = decoded.indexOf(':');
+        if (splitAt >= 0) {
+          if (!params.client_id) params.client_id = decodeURIComponent(decoded.slice(0, splitAt));
+          clientSecret = decodeURIComponent(decoded.slice(splitAt + 1));
+        }
+      } catch {
+        clientSecret = '';
+      }
+    }
+
     try {
       const tokens = await exchangeOAuthToken(db, {
         originUrl,
         grantType: String(params.grant_type || ''),
         params,
+        clientSecret,
       });
       return c.json(tokens);
     } catch (err) {
@@ -817,6 +888,7 @@ export function createServerApp() {
     const inh = await createAiInhabitantInDb(db, {
       houseId: ctx.fullHouse.id,
       stewardInhabitant: ctx.viewer,
+      house: ctx.fullHouse,
       ...body,
     });
 
@@ -849,11 +921,19 @@ export function createServerApp() {
       houseIdOrSlug: targetRows[0].house_id,
       viewerUserId: user.id,
     });
-    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) {
-      return c.json({ error: 'Steward permission required.' }, 403);
+    const target = ctx?.fullHouse.getInhabitant(inhId);
+    const selfProfile = ctx?.viewer?.id === inhId && ctx.viewer.isHuman;
+    if (!ctx || !(selfProfile || canManageAi(ctx.viewer, target))) {
+      return c.json({ error: 'Permission required.' }, 403);
     }
 
     const body = await c.req.json();
+    if (selfProfile && !canManageAi(ctx.viewer, target)) {
+      const allowed = ['name', 'bio', 'hobbies', 'useGravatar', 'signatureNotes'];
+      for (const key of Object.keys(body)) {
+        if (!allowed.includes(key)) delete body[key];
+      }
+    }
     await updateInhabitantInDb(db, {
       houseId: targetRows[0].house_id,
       inhabitantId: inhId,
@@ -864,6 +944,77 @@ export function createServerApp() {
       houseIdOrSlug: targetRows[0].house_id,
       viewerUserId: user.id,
     });
+    return c.json({ inhabitant: refreshed.viewerHouse.getInhabitant(inhId)?.def });
+  });
+
+  app.patch('/api/inhabitants/:inhabitantId/participation', async (c) => {
+    const db = await getDb();
+    const user = await getSessionUser(c, db);
+    if (!user) return c.json({ error: 'Authentication required.' }, 401);
+    const inhId = c.req.param('inhabitantId');
+    const { rows: targetRows } = await db.query(
+      `SELECT * FROM inhabitants WHERE id = $1 AND kind = 'ai' LIMIT 1`,
+      [inhId]
+    );
+    if (!targetRows[0]) return c.json({ error: 'AI inhabitant not found.' }, 404);
+    const ctx = await hydrateHouseForViewer(db, {
+      houseIdOrSlug: targetRows[0].house_id,
+      viewerUserId: user.id,
+    });
+    if (!ctx || !canManageAi(ctx.viewer, ctx.fullHouse.getInhabitant(inhId))) {
+      return c.json({ error: 'Permission required.' }, 403);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    await setAiParticipationModeInDb(db, {
+      houseId: ctx.fullHouse.id,
+      inhabitantId: inhId,
+      mode: body.mode || body.participationMode,
+      locked: body.locked,
+    });
+    for (const room of ctx.fullHouse.activeRooms || []) emitRoomWake(room.id, ctx.fullHouse.id);
+    const refreshed = await hydrateHouseForViewer(db, {
+      houseIdOrSlug: ctx.fullHouse.id,
+      viewerUserId: user.id,
+    });
+    return c.json({ inhabitant: refreshed.viewerHouse.getInhabitant(inhId)?.def });
+  });
+
+  app.post('/api/inhabitants/:inhabitantId/avatar/presign', async (c) => {
+    const db = await getDb();
+    const user = await getSessionUser(c, db);
+    if (!user) return c.json({ error: 'Authentication required.' }, 401);
+    const inhId = c.req.param('inhabitantId');
+    const ctx = await hydrateHouseForViewer(db, {
+      houseIdOrSlug: (await db.query(`SELECT house_id FROM inhabitants WHERE id = $1`, [inhId])).rows[0]?.house_id,
+      viewerUserId: user.id,
+    });
+    const target = ctx?.fullHouse.getInhabitant(inhId);
+    const allowed = ctx && (ctx.viewer.id === inhId || canManageAi(ctx.viewer, target));
+    if (!allowed) return c.json({ error: 'Permission required.' }, 403);
+    const body = await c.req.json();
+    const signed = await presignInhabitantAvatar(getOriginUrl(c.req.url), {
+      houseId: ctx.fullHouse.id,
+      inhabitantId: inhId,
+      mimeType: body.mimeType,
+      byteLength: body.byteLength,
+    });
+    return c.json(signed);
+  });
+
+  app.post('/api/inhabitants/:inhabitantId/avatar/commit', async (c) => {
+    const db = await getDb();
+    const user = await getSessionUser(c, db);
+    if (!user) return c.json({ error: 'Authentication required.' }, 401);
+    const inhId = c.req.param('inhabitantId');
+    const houseId = (await db.query(`SELECT house_id FROM inhabitants WHERE id = $1`, [inhId])).rows[0]?.house_id;
+    const ctx = await hydrateHouseForViewer(db, { houseIdOrSlug: houseId, viewerUserId: user.id });
+    const target = ctx?.fullHouse.getInhabitant(inhId);
+    if (!ctx || !(ctx.viewer.id === inhId || canManageAi(ctx.viewer, target))) {
+      return c.json({ error: 'Permission required.' }, 403);
+    }
+    const body = await c.req.json().catch(() => ({}));
+    await db.query(`UPDATE inhabitants SET avatar_r2_key = $1 WHERE id = $2`, [body.r2Key, inhId]);
+    const refreshed = await hydrateHouseForViewer(db, { houseIdOrSlug: houseId, viewerUserId: user.id, originUrl: getOriginUrl(c.req.url) });
     return c.json({ inhabitant: refreshed.viewerHouse.getInhabitant(inhId)?.def });
   });
 
@@ -883,8 +1034,8 @@ export function createServerApp() {
       houseIdOrSlug: targetRows[0].house_id,
       viewerUserId: user.id,
     });
-    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) {
-      return c.json({ error: 'Steward permission required.' }, 403);
+    if (!ctx || !canManageAi(ctx.viewer, ctx.fullHouse.getInhabitant(inhId))) {
+      return c.json({ error: 'Permission required.' }, 403);
     }
 
     const body = await c.req.json().catch(() => ({}));
@@ -917,7 +1068,7 @@ export function createServerApp() {
       houseIdOrSlug: targetRows[0].house_id,
       viewerUserId: user.id,
     });
-    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.CREDENTIAL_REVOKE)) {
+    if (!ctx || !canManageAi(ctx.viewer, ctx.fullHouse.getInhabitant(inhId))) {
       return c.json({ error: 'Permission required.' }, 403);
     }
 
@@ -955,7 +1106,7 @@ export function createServerApp() {
       houseIdOrSlug: targetRows[0].house_id,
       viewerUserId: user.id,
     });
-    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.CREDENTIAL_REVOKE)) {
+    if (!ctx || !canManageAi(ctx.viewer, ctx.fullHouse.getInhabitant(inhId))) {
       return c.json({ error: 'Permission required.' }, 403);
     }
 
@@ -988,8 +1139,8 @@ export function createServerApp() {
       houseIdOrSlug: targetRows[0].house_id,
       viewerUserId: user.id,
     });
-    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) {
-      return c.json({ error: 'Steward permission required.' }, 403);
+    if (!ctx || !canManageAi(ctx.viewer, ctx.fullHouse.getInhabitant(inhId))) {
+      return c.json({ error: 'Permission required.' }, 403);
     }
 
     const body = await c.req.json();
@@ -1043,8 +1194,8 @@ export function createServerApp() {
       houseIdOrSlug: targetRows[0].house_id,
       viewerUserId: user.id,
     });
-    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) {
-      return c.json({ error: 'Steward permission required.' }, 403);
+    if (!ctx || !canManageAi(ctx.viewer, ctx.fullHouse.getInhabitant(inhId))) {
+      return c.json({ error: 'Permission required.' }, 403);
     }
 
     const body = await c.req.json().catch(() => ({}));

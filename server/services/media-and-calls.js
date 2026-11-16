@@ -129,6 +129,34 @@ export async function presignRoomMediaUpload(
   };
 }
 
+export async function presignInhabitantAvatar(originUrl, { houseId, inhabitantId, mimeType, byteLength }) {
+  const size = Number(byteLength);
+  if (!Number.isFinite(size) || size < 1 || size > 2 * 1024 * 1024) {
+    throw new Error('Avatar must be an image under 2 MB.');
+  }
+  const cleanMime = String(mimeType || '');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(cleanMime)) {
+    throw new Error('Avatar must be jpeg, png, or webp.');
+  }
+  const r2Key = `houses/${houseId}/avatars/${inhabitantId}`;
+  let uploadUrl;
+  if (isR2Configured()) {
+    const cmd = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: r2Key,
+      ContentType: cleanMime,
+      ContentLength: size,
+    });
+    uploadUrl = await getSignedUrl(getR2Client(), cmd, { expiresIn: 300, signableHeaders: new Set(['content-type']) });
+  } else {
+    const expiresAt = Math.floor(Date.now() / 1000) + 300;
+    const sig = buildLocalMediaSignature({ r2Key, method: 'PUT', byteLength: size, mimeType: cleanMime, expiresAt });
+    const params = new URLSearchParams({ len: String(size), type: cleanMime, exp: String(expiresAt), sig });
+    uploadUrl = `${originUrl}/api/local-r2/${encodeURIComponent(r2Key)}?${params.toString()}`;
+  }
+  return { r2Key, uploadUrl, expiresIn: 300 };
+}
+
 export async function mintSignedReadUrl(originUrl, attachmentRow, ttlSec = 900) {
   if (!attachmentRow || attachmentRow.status === 'withdrawn') return null;
   if (isR2Configured()) {

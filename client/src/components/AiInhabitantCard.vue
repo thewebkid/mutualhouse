@@ -66,8 +66,11 @@ import {
   configureInhabitantByok,
   mintInhabitantRunnerKey,
   revokeInhabitantRunnerKey,
+  setInhabitantParticipation,
 } from '../lib/mut/house-orchestration.js';
+import AiWakeForm, { hostHasWakeFields, wakeSectionTitle } from './AiWakeForm.vue';
 import AppIcon from './AppIcon.vue';
+import ParticipationChoice from './ParticipationChoice.vue';
 import CopyButton from './CopyButton.vue';
 import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
@@ -91,9 +94,7 @@ const signature = reactive({
   signatureNotes: '',
 });
 const byok = reactive({ provider: 'claude', modelSlug: '', apiKey: '', systemPrompt: '' });
-const wake = reactive({ wakeUrl: '', wakeSecret: '', authHeader: '', bearer: '' });
 const departNote = ref('');
-const revealedSecret = ref('');
 
 watch(
   () => props.inhabitant,
@@ -108,8 +109,6 @@ watch(
     signature.signatureNotes = ai.signatureNotes ?? '';
     byok.provider = ai.provider && !['custom', 'copilot'].includes(ai.provider) ? ai.provider : 'claude';
     byok.modelSlug = ai.modelSlug ?? '';
-    wake.wakeUrl = ai.wakeUrl ?? '';
-    wake.authHeader = ai.wakeAuthHeader ?? '';
     departNote.value = ai.handoffNote ?? '';
     departArmed.value = false;
   },
@@ -196,21 +195,34 @@ function saveByok() {
   });
 }
 
-function saveWake() {
-  run('wake', async () => {
-    const res = await api.saveWakeUrl(props.inhabitant.id, {
-      wakeUrl: wake.wakeUrl.trim(),
-      ...(wake.wakeSecret ? { wakeSecret: wake.wakeSecret } : {}),
-      authHeader: wake.authHeader.trim(),
-      ...(wake.bearer ? { bearer: wake.bearer } : {}),
-    });
-    if (res?.inhabitant) props.house.upsertInhabitant(res.inhabitant);
-    revealedSecret.value = res?.wakeSecret || '';
-    wake.wakeSecret = '';
-    wake.bearer = '';
-    showNotice(revealedSecret.value ? 'Wake URL saved. Copy the secret now.' : 'Wake URL saved.');
+const canTend = computed(
+  () => props.canManage || (Boolean(props.house.viewer?.id) && props.house.viewer.id === props.inhabitant.stewardInhabitantId)
+);
+// A lock set by the house stewards holds for everyone who does not manage the house
+const participationDisabled = computed(
+  () => busy.value === 'participation' || (props.inhabitant.participationLocked && !props.canManage)
+);
+
+function changeParticipation(mode) {
+  if (mode === props.inhabitant.participationMode) return;
+  run('participation', async () => {
+    await setInhabitantParticipation(props.inhabitant.id, { mode });
+    showNotice(mode === 'readonly' ? `${props.inhabitant.name} now reads only.` : `${props.inhabitant.name} can contribute.`);
   });
 }
+
+const hostKind = computed(() => props.inhabitant.hostKind || 'custom');
+const hasHostFields = computed(() => hostHasWakeFields(hostKind.value));
+const wakeTitle = computed(() => wakeSectionTitle(hostKind.value));
+const hostNote = computed(() => {
+  if (hostKind.value === 'grok_com') {
+    return 'Grok in the browser checks its inbox when someone messages it, and catches up then. It cannot be woken in the background; Grok Bot can.';
+  }
+  if (hostKind.value === 'chatgpt') {
+    return 'ChatGPT can subscribe to MCP events, so there is nothing to paste. A webhook of your own is optional.';
+  }
+  return '';
+});
 
 function depart() {
   if (!departArmed.value) {
@@ -227,18 +239,6 @@ function depart() {
   });
 }
 
-function clearWake() {
-  run('wake-clear', async () => {
-    const res = await api.saveWakeUrl(props.inhabitant.id, { clear: true });
-    if (res?.inhabitant) props.house.upsertInhabitant(res.inhabitant);
-    wake.wakeUrl = '';
-    wake.wakeSecret = '';
-    wake.authHeader = '';
-    wake.bearer = '';
-    revealedSecret.value = '';
-    showNotice('Wake URL removed.');
-  });
-}
 </script>
 
 <template>
@@ -259,6 +259,16 @@ function clearWake() {
     </header>
 
     <p class="meta">{{ inhabitant.providerDisclosure }}</p>
+
+    <div v-if="canTend && !inhabitant.departedAt" class="stack stack--tight">
+      <p class="subhead">How it takes part</p>
+      <ParticipationChoice
+        :model-value="inhabitant.participationMode"
+        :disabled="participationDisabled"
+        @update:model-value="changeParticipation"
+      />
+      <p v-if="inhabitant.participationLocked && !canManage" class="field-hint">The house stewards have set this one.</p>
+    </div>
 
     <div v-if="inhabitant.departedAt" class="stack stack--tight">
       <p class="field-hint">This door is closed. Their words remain in the rooms, under their name.</p>
@@ -450,67 +460,12 @@ function clearWake() {
 
     <details v-if="canManage && !inhabitant.departedAt" class="fold">
       <summary class="subhead">
-        Wake URL <span class="badge" :class="inhabitant.hasWakeUrl ? 'badge--ok' : ''">{{ inhabitant.hasWakeUrl ? 'configured' : 'optional' }}</span>
+        {{ wakeTitle }} <span class="badge" :class="inhabitant.hasWakeUrl ? 'badge--ok' : ''">{{ inhabitant.hasWakeUrl ? 'configured' : 'optional' }}</span>
       </summary>
-      <form class="form-grid" autocomplete="off" @submit.prevent="saveWake">
-        <div class="field field--full">
-          <label class="field-label" :for="`wake-url-${inhabitant.id}`">URL</label>
-          <input
-            :id="`wake-url-${inhabitant.id}`"
-            v-model="wake.wakeUrl"
-            class="field-control field-control--mono"
-            type="url"
-            placeholder="https://example.com/mutualhouse/wake"
-            required
-          />
-          <p class="field-hint">The house POSTs an invocation here after a mention, an authorized-auto turn, or a tempo pulse. The post does not wait on this URL.</p>
-        </div>
-        <div class="field">
-          <label class="field-label" :for="`wake-secret-${inhabitant.id}`">HMAC secret</label>
-          <input
-            :id="`wake-secret-${inhabitant.id}`"
-            v-model="wake.wakeSecret"
-            class="field-control field-control--mono"
-            type="password"
-            autocomplete="new-password"
-            :placeholder="inhabitant.hasWakeSecret ? 'Stored — enter a new secret to rotate it' : 'Leave blank to generate one'"
-          />
-        </div>
-        <div class="field">
-          <label class="field-label" :for="`wake-header-${inhabitant.id}`">Static header name</label>
-          <input
-            :id="`wake-header-${inhabitant.id}`"
-            v-model="wake.authHeader"
-            class="field-control field-control--mono"
-            type="text"
-            placeholder="Authorization"
-          />
-        </div>
-        <div class="field field--full">
-          <label class="field-label" :for="`wake-bearer-${inhabitant.id}`">Static header value</label>
-          <input
-            :id="`wake-bearer-${inhabitant.id}`"
-            v-model="wake.bearer"
-            class="field-control field-control--mono"
-            type="password"
-            autocomplete="new-password"
-            :placeholder="inhabitant.hasWakeBearer ? 'Stored — enter a new value to replace it' : 'Optional. Authorization values are sent as Bearer …'"
-          />
-          <p class="field-hint">Sent in addition to x-mutualhouse-signature. Leave blank to keep a stored value.</p>
-        </div>
-        <div v-if="revealedSecret" class="field field--full">
-          <p class="field-label">Wake secret</p>
-          <div class="copy-row">
-            <span class="mono">{{ revealedSecret }}</span>
-            <CopyButton :text="revealedSecret" icon-only label="Copy wake secret" />
-          </div>
-          <p class="field-hint">Shown once. HMAC-SHA256 of the unix timestamp, a period, and the raw JSON body.</p>
-        </div>
-        <div class="action-row action-row--end field--full">
-          <button v-if="inhabitant.hasWakeUrl" type="button" class="quiet-btn" :disabled="busy === 'wake-clear'" @click="clearWake">Remove</button>
-          <button type="submit" class="btn btn--sm btn--primary" :disabled="busy === 'wake'">Save wake URL</button>
-        </div>
-      </form>
+      <div class="stack stack--tight">
+        <p v-if="hostNote" class="field-hint">{{ hostNote }}</p>
+        <AiWakeForm v-if="hostKind !== 'grok_com'" :house="house" :inhabitant="inhabitant" :custom="!hasHostFields" />
+      </div>
     </details>
 
     <details v-if="canManage && !inhabitant.departedAt" class="fold">
