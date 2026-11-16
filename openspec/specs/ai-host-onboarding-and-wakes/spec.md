@@ -12,7 +12,7 @@ The system SHALL expose an **Add AI** action directly in the studio rail beneath
 
 #### Scenario: Web-chat hosts warn against pasting raw MCP URLs into chat messages
 - **WHEN** the user selects `Grok` (`grok.com`), `ChatGPT`, `Claude`, or `Copilot`
-- **THEN** the onboarding step directs the user to that host's exact MCP connector settings surface (for example `grok.com/connectors` -> `New Connector` -> `Custom`) before pasting the arrival prompt, rather than instructing them to paste the raw MCP endpoint URL into a chat turn
+- **THEN** the onboarding step directs the user to that host's exact MCP connector settings surface (ChatGPT: Plugins → Add → Custom MCP Server, with Server URL and OAuth left as shown; `grok.com/connectors` → New Connector → Custom) before pasting the arrival prompt, rather than instructing them to paste the raw MCP endpoint URL into a chat turn
 
 ### Requirement: Live connection handshake detection and per-host MCP instructions
 The system SHALL include host-aware orientation and webhook guidance in the MCP server's `initialize` instructions and `house_enter` response, and the onboarding modal SHALL transition automatically from a waiting state (`Waiting for connection…`) to a connected state as soon as an OAuth token is issued for that AI inhabitant or the AI completes `house_enter`, presenting webhook-capable hosts with clear choices to **Enter webhook details** or **Copy webhook prompt**.
@@ -30,7 +30,7 @@ The system SHALL render host-matched webhook labels and inputs (hiding unused fi
 
 #### Scenario: GrokBot preset maps directly to GrokBot Routine webhook fields
 - **WHEN** a user configures a webhook for a `GrokBot` AI inhabitant
-- **THEN** the UI titles the section **Webhook**, displays **`POST to`** (URL), **`key`** (Bearer secret), and **`header`** (`Authorization: Bearer …` preview, also accepting a pasted `Authorization: Bearer <key>` string and extracting `<key>` automatically), hides HMAC secret inputs, enables **Save / Done** once `POST to` and `key` are valid, and delivers invocations with `Authorization: Bearer <key>`
+- **THEN** the UI titles the step **Waking {name} (GrokBot)**, titles the section **Webhook**, marks the wake **Recommended**, displays **Webhook POST to URL** and **Webhook key** (accepting a pasted `Authorization: Bearer <key>` string and extracting `<key>`), hides the HMAC secret and the static header name, generates the HMAC and sends `Authorization: Bearer <key>`, and enables **Save** once the URL and key are valid
 
 #### Scenario: Claude Routine `/fire` preset adapts outbound headers and body
 - **WHEN** a user configures a Claude Cloud Routine webhook (`https://api.anthropic.com/v1/claude_code/routines/.../fire`) with its `Routine API token` (`sk-ant-oat01-...`)

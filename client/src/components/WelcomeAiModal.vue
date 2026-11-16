@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { buildArrivalPrompt, buildWebhookPrompt, getAiHost, listAiHosts } from '@shared/lib/ai-hosts.js';
+import { buildArrivalPrompt, buildWebhookPrompt, getAiHost, listAiHosts, wakeHostFor } from '@shared/lib/ai-hosts.js';
 import { showError } from '../lib/state.js';
 import { registerAiInhabitant } from '../lib/mut/house-orchestration.js';
 import AiWakeForm, { hostHasWakeFields, wakeSectionTitle } from './AiWakeForm.vue';
@@ -35,7 +35,7 @@ const ai = computed(() => {
   const id = createdId.value || props.inhabitant?.id;
   return (id && props.house.getInhabitant(id)) || props.inhabitant || null;
 });
-const host = computed(() => getAiHost(ai.value?.hostKind || hostKind.value));
+const host = computed(() => (ai.value ? wakeHostFor(ai.value) : getAiHost(hostKind.value)));
 const mcpUrl = computed(() => {
   const path = ai.value?.mcpEndpointPath ?? (ai.value ? `/mcp/inh/${ai.value.id}` : '');
   return path ? `${window.location.origin}${path}` : '';
@@ -54,7 +54,9 @@ const canContinue = computed(() => Boolean(name.value.trim() && hostKind.value) 
 const title = computed(() => {
   if (step.value === 1) return 'Welcome an AI';
   if (step.value === 2) return `Connect ${ai.value?.name ?? 'your AI'}`;
-  return `Waking ${ai.value?.name ?? 'your AI'}`;
+  const who = ai.value?.name ?? 'your AI';
+  if (host.value.id === 'grok_bot') return `Waking ${who} (GrokBot)`;
+  return `Waking ${who}`;
 });
 
 function reset() {
@@ -255,8 +257,7 @@ async function welcome() {
                 <div class="stack stack--tight">
                   <h3 class="subhead">{{ wakeTitle }}</h3>
                   <p v-if="host.id === 'grok_bot'" class="muted">
-                    So the house can wake {{ ai?.name }} when it is addressed. Ask the Bot to make a routine, then paste
-                    what it shows.
+                    Recommended. A URL the house can call to wake {{ ai?.name }} when it is addressed.
                   </p>
                   <p v-else-if="host.id === 'claude'" class="muted">
                     So the house can wake {{ ai?.name }} when it is addressed. Create a routine with an API trigger,

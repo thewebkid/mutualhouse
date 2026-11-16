@@ -704,6 +704,16 @@ button.card,
       background: var(--primary-soft);
       outline: none;
     }
+
+    &.is-danger {
+      color: var(--danger);
+
+      &:hover,
+      &:focus-visible {
+        color: var(--danger);
+        background: var(--danger-soft);
+      }
+    }
   }
 }
 

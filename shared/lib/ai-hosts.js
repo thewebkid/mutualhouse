@@ -29,10 +29,12 @@ const HOSTS = Object.freeze({
     chatCanInstallMcp: false,
     defaultWakePreset: 'mcp_events',
     connectorSteps: [
-      'Open ChatGPT Settings, then Connectors.',
-      'Turn on Developer mode if custom connectors are hidden.',
-      'Create a connector and paste the Mutual House link.',
-      'Sign in here and approve this inhabitant.',
+      'In ChatGPT, open Plugins. Open Add, then choose Custom MCP Server.',
+      'Name it Mutual House. Leave Icon and Description blank.',
+      'Under Connection, keep Server URL selected, not Tunnel. Paste the link below.',
+      'Authentication is already OAuth. Leave Advanced OAuth settings closed. The house fills those in.',
+      'Check I understand and want to continue, then choose Create as a plugin.',
+      'Sign in here when ChatGPT asks, and approve this inhabitant.',
     ],
     webhookFields: [],
   },
@@ -77,9 +79,8 @@ const HOSTS = Object.freeze({
       'Approve the door when Mutual House asks.',
     ],
     webhookFields: [
-      { id: 'wakeUrl', label: 'POST to', kind: 'url', required: true },
-      { id: 'bearer', label: 'key', kind: 'secret', required: true },
-      { id: 'headerPreview', label: 'header', kind: 'readonly', required: false },
+      { id: 'wakeUrl', label: 'Webhook POST to URL', kind: 'url', required: true },
+      { id: 'bearer', label: 'Webhook key', kind: 'secret', required: true },
     ],
   },
   claude: {
@@ -125,6 +126,25 @@ export function getAiHost(hostKind) {
   return HOSTS[hostKind] || HOSTS.custom;
 }
 
+/**
+ * Which host's wake form to show. A stored host wins. A custom inhabitant
+ * with a GrokBot or Claude routine URL is still that host: the form was
+ * saved before host kind was recorded.
+ */
+export function wakeHostFor(inhabitant) {
+  if (!inhabitant) return HOSTS.custom;
+  const kind = inhabitant.hostKind;
+  if (isHostKind(kind) && kind !== 'custom') return HOSTS[kind];
+  if (inhabitant.wakePreset === 'grok_bot') return HOSTS.grok_bot;
+  if (inhabitant.wakePreset === 'claude_routine') return HOSTS.claude;
+  if (inhabitant.wakePreset === 'copilot_studio') return HOSTS.copilot;
+  if (inhabitant.wakePreset === 'mcp_events') return HOSTS.chatgpt;
+  const url = String(inhabitant.wakeUrl || '');
+  if (/cursor\.sh/i.test(url)) return HOSTS.grok_bot;
+  if (/api\.anthropic\.com/i.test(url)) return HOSTS.claude;
+  return getAiHost(kind);
+}
+
 export function listAiHosts() {
   return HOST_KINDS.map((id) => HOSTS[id]);
 }
@@ -160,7 +180,7 @@ export function buildArrivalPrompt({ name, mcpUrl, hostKind }) {
 export function buildWebhookPrompt({ name, hostKind }) {
   const host = getAiHost(hostKind);
   if (host.id === 'grok_bot') {
-    return `Create a Mutual House wake routine for ${name || 'me'}. Trigger it when a webhook fires. Show me POST to, key, and header. I will paste those into Mutual House. Do not put the key in the chat transcript if you can show it only in the routine panel.`;
+    return `Create a Mutual House wake routine for ${name || 'me'}. Trigger it when a webhook fires. Show me the webhook POST to URL and the webhook key. I will paste those into Mutual House. Do not put the key in the chat transcript if you can show it only in the routine panel.`;
   }
   if (host.id === 'claude') {
     return `Create a Claude scheduled task for ${name || 'me'} with an API trigger, and keep the Mutual House connector attached. Show me the Fire URL and the routine API token once. I will paste those into Mutual House.`;

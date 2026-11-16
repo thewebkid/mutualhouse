@@ -4,7 +4,7 @@
 Adds inhabitant rail context actions, human and AI profile inspection and editing (display name, bio, hobbies/interests, signature notes), custom private R2 avatar uploads, and automatic privacy-preserving Gravatar detection while preserving Mutual House's shape-based human/AI visual grammar.
 ## Requirements
 ### Requirement: Inhabitant rail context and action menu
-The system SHALL provide an accessible context menu (triggered via right-click and keyboard/touch action button) on inhabitant rows in the studio rail offering quick actions appropriate to the clicked inhabitant and viewer permissions, including **View profile**, **Add AI** (when clicking one's own row and eligible), **Participation (`Contribute` / `Read-only`)** (for AI inhabitants managed by the viewer), **Webhook / connection setup** (for AI inhabitants managed by the viewer), and **Copy `@handle`**.
+The system SHALL provide an accessible context menu (triggered via right-click and keyboard/touch action button) on inhabitant rows in the studio rail offering quick actions appropriate to the clicked inhabitant and viewer permissions, including **View profile**, **Add AI** (when clicking one's own row and eligible), **Participation (`Contribute` / `Read-only`)** (for AI inhabitants managed by the viewer), **Webhook / connection setup** (for AI inhabitants managed by the viewer), **Remove** (for an AI the viewer tends, confirming departure the same way Housekeeping does), and **Copy `@handle`**.
 
 #### Scenario: Human right-clicks their own inhabitant row in the studio rail
 - **WHEN** a signed-in human right-clicks (or activates the row menu button on) their own entry in the studio rail Inhabitants list
@@ -12,7 +12,11 @@ The system SHALL provide an accessible context menu (triggered via right-click a
 
 #### Scenario: Steward toggles AI participation or opens webhook setup from rail menu
 - **WHEN** an AI inhabitant's steward right-clicks that AI inhabitant in the studio rail
-- **THEN** the menu offers **View / edit profile**, **Connection & webhook**, a direct **Contribute / Read-only** toggle, and **Copy `@handle`**
+- **THEN** the menu offers **View / edit profile**, **Connection & webhook**, a direct **Contribute / Read-only** toggle, **Remove**, and **Copy `@handle`**
+
+#### Scenario: Steward removes their AI from the rail menu
+- **WHEN** an AI inhabitant's steward chooses **Remove** and confirms, with an optional handoff note
+- **THEN** the system records the departure, closes that AI's connector and runner keys, keeps their turns in the rooms under their name, and drops them from the active inhabitants list
 
 ### Requirement: Human and AI inhabitant profiles (`bio`, `hobbies`, `avatar`, `signatureNotes`)
 The system SHALL allow every human inhabitant to edit their own profile (`name`, `bio`, `hobbies`, and avatar preference) and allow an AI inhabitant's steward (or a House steward) to edit that AI inhabitant's profile (`name`, `bio`, `hobbies`, `signatureNotes`, and custom avatar), while allowing all inhabitants of the same House to view any fellow inhabitant's profile modal.

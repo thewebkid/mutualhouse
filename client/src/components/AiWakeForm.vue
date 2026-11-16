@@ -15,7 +15,7 @@ export function hostHasWakeFields(hostKind) {
 
 <script setup>
 import { computed, ref, useId } from 'vue';
-import { getAiHost, normalizeBearerSecret } from '@shared/lib/ai-hosts.js';
+import { getAiHost, normalizeBearerSecret, wakeHostFor } from '@shared/lib/ai-hosts.js';
 import { api } from '../lib/api.js';
 import { showError, showNotice } from '../lib/state.js';
 import { useWakeDraft } from '../lib/use-wake-draft.js';
@@ -36,15 +36,15 @@ const { draft, markDirty, saved } = useWakeDraft(source);
 const busy = ref(false);
 const revealedSecret = ref('');
 
-const host = computed(() => getAiHost(props.inhabitant.hostKind));
+const host = computed(() => wakeHostFor(props.inhabitant));
 const isCustom = computed(() => props.custom || !hostHasWakeFields(host.value.id));
 const fields = computed(() => (isCustom.value ? getAiHost('custom') : host.value).webhookFields);
 const preset = computed(() => (isCustom.value ? 'custom' : host.value.defaultWakePreset));
 
 const HINTS = {
   grok_bot: {
-    wakeUrl: 'The address your Grok Bot routine shows after you create it.',
-    bearer: 'Pasted as shown. “Authorization: Bearer …” is trimmed to the key.',
+    wakeUrl: 'The POST to address in the GrokBot webhook window.',
+    bearer: 'The key in the GrokBot webhook window. A pasted “Authorization: Bearer …” line is trimmed to the key.',
   },
   claude: {
     wakeUrl: 'The Fire URL from the routine’s API trigger.',
@@ -69,6 +69,12 @@ function hint(id) {
 
 function label(f) {
   return f.label.charAt(0).toUpperCase() + f.label.slice(1);
+}
+
+function fieldRequired(f) {
+  if (!f.required) return false;
+  if (f.id === 'bearer' && props.inhabitant.hasWakeBearer) return false;
+  return true;
 }
 
 function placeholder(f) {
@@ -101,7 +107,8 @@ function buildBody() {
   const key = normalizeBearerSecret(draft.bearer);
   return {
     wakeUrl: url,
-    ...(key ? { bearer: key, authHeader: 'Authorization' } : {}),
+    authHeader: 'Authorization',
+    ...(key ? { bearer: key } : {}),
     wakePreset: preset.value,
   };
 }
@@ -116,7 +123,8 @@ async function save() {
     }
     const res = await api.saveWakeUrl(props.inhabitant.id, buildBody());
     if (res?.inhabitant) props.house.upsertInhabitant(res.inhabitant);
-    revealedSecret.value = res?.wakeSecret || '';
+    // Host presets generate the HMAC on the server. The person never sees it.
+    revealedSecret.value = isCustom.value ? res?.wakeSecret || '' : '';
     saved();
     showNotice(revealedSecret.value ? 'Saved. Copy the secret now.' : 'Saved.');
     emit('saved');
@@ -166,7 +174,7 @@ async function clear() {
         :type="f.kind === 'url' ? 'url' : f.kind === 'secret' ? 'password' : 'text'"
         :autocomplete="f.kind === 'secret' ? 'new-password' : 'off'"
         :placeholder="placeholder(f)"
-        :required="f.required"
+        :required="fieldRequired(f)"
         @input="markDirty"
       />
       <p v-if="hint(f.id)" class="field-hint">{{ hint(f.id) }}</p>
@@ -182,7 +190,7 @@ async function clear() {
     </div>
 
     <div class="action-row action-row--end field--full">
-      <button v-if="inhabitant.hasWakeUrl" type="button" class="quiet-btn" :disabled="busy" @click="clear">Remove</button>
+      <button v-if="inhabitant.hasWakeUrl" type="button" class="quiet-btn" :disabled="busy" @click="clear">Clear webhook</button>
       <button type="submit" class="btn btn--sm btn--primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save' }}</button>
     </div>
   </form>
