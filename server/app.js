@@ -39,8 +39,10 @@ import {
 import {
   createAiInhabitantInDb,
   createBlankHouseInDb,
+  departAiInhabitantInDb,
   hydrateHouseForViewer,
   mapInhabitantRow,
+  updateInhabitantInDb,
 } from './services/house-service.js';
 import {
   executeRoomCommand,
@@ -852,23 +854,45 @@ export function createServerApp() {
     }
 
     const body = await c.req.json();
-    const nextArrival =
-      body.arrivalNumber !== undefined
-        ? Math.max(1, Number(body.arrivalNumber))
-        : targetRows[0].arrival_number;
-    const nextHandoff =
-      body.handoffNote !== undefined ? String(body.handoffNote) : targetRows[0].handoff_note;
-    const nextNotes =
-      body.signatureNotes !== undefined
-        ? String(body.signatureNotes)
-        : targetRows[0].signature_notes;
+    await updateInhabitantInDb(db, {
+      houseId: targetRows[0].house_id,
+      inhabitantId: inhId,
+      body,
+    });
 
-    await db.query(
-      `UPDATE inhabitants
-       SET arrival_number = $1, handoff_note = $2, signature_notes = $3
-       WHERE id = $4`,
-      [nextArrival, nextHandoff, nextNotes, inhId]
+    const refreshed = await hydrateHouseForViewer(db, {
+      houseIdOrSlug: targetRows[0].house_id,
+      viewerUserId: user.id,
+    });
+    return c.json({ inhabitant: refreshed.viewerHouse.getInhabitant(inhId)?.def });
+  });
+
+  app.post('/api/inhabitants/:inhabitantId/depart', async (c) => {
+    const db = await getDb();
+    const user = await getSessionUser(c, db);
+    if (!user) return c.json({ error: 'Authentication required.' }, 401);
+
+    const inhId = c.req.param('inhabitantId');
+    const { rows: targetRows } = await db.query(
+      `SELECT * FROM inhabitants WHERE id = $1 AND kind = 'ai' LIMIT 1`,
+      [inhId]
     );
+    if (!targetRows[0]) return c.json({ error: 'AI inhabitant not found.' }, 404);
+
+    const ctx = await hydrateHouseForViewer(db, {
+      houseIdOrSlug: targetRows[0].house_id,
+      viewerUserId: user.id,
+    });
+    if (!ctx || !ctx.viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) {
+      return c.json({ error: 'Steward permission required.' }, 403);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    await departAiInhabitantInDb(db, {
+      houseId: targetRows[0].house_id,
+      inhabitantId: inhId,
+      handoffNote: body.handoffNote,
+    });
 
     const refreshed = await hydrateHouseForViewer(db, {
       houseIdOrSlug: targetRows[0].house_id,

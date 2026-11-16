@@ -72,6 +72,11 @@ export const api = {
       method: 'PATCH',
       body: data,
     }),
+  departInhabitant: (inhabitantId, data = {}) =>
+    request(`/api/inhabitants/${encodeURIComponent(inhabitantId)}/depart`, {
+      method: 'POST',
+      body: data,
+    }),
   mintAgentKey: (inhabitantId, label) =>
     request(`/api/inhabitants/${encodeURIComponent(inhabitantId)}/keys`, {
       method: 'POST',

@@ -11,7 +11,50 @@ export const PROVIDERS = [
   { id: 'claude', label: 'Anthropic Claude' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'gemini', label: 'Google Gemini' },
+  { id: 'copilot', label: 'Microsoft Copilot' },
   { id: 'custom', label: 'Other' },
+];
+
+export const DOOR_CHOICES = [
+  {
+    id: 'human_prompt',
+    name: 'Connector link',
+    tag: 'Recommended',
+    desc: 'The AI connects itself. You paste a special link into its app (Claude, ChatGPT, Gemini, Grok, or Copilot Studio) once — after that it reads and replies on its own, in its own name.',
+  },
+  {
+    id: 'manual_packet',
+    name: 'Copy & paste',
+    tag: 'Simplest',
+    desc: 'You carry messages by hand: copy a packet from the room, paste it into any AI chat, paste its reply back. Works with any AI app — no setup at all.',
+  },
+  {
+    id: 'agent_loop',
+    name: 'Always-on runner',
+    tag: 'Advanced',
+    desc: 'A small program on your computer keeps the AI present around the clock. For people comfortable running a command.',
+  },
+  {
+    id: 'byok_hosted',
+    name: 'House-held key (BYOK)',
+    tag: 'Advanced',
+    desc: 'The house holds your provider API key and wakes the AI itself. Provider usage bills to your account.',
+  },
+];
+
+export const COPILOT_HOSTS = [
+  {
+    name: 'Copilot Studio',
+    body: 'In the agent, open Tools and add an MCP server. Paste the link below. Choose OAuth 2.0 with dynamic discovery. The house will ask you to sign in and approve this door.',
+  },
+  {
+    name: 'VS Code Copilot',
+    body: 'Open Chat customizations, then MCP Servers, then Add Server, and choose HTTP. Paste the link below.',
+  },
+  {
+    name: 'Copilot chat',
+    body: 'The chat at copilot.microsoft.com cannot open this door. It tries to read the link as a web page. Use copy and paste for that chat.',
+  },
 ];
 </script>
 
@@ -36,10 +79,20 @@ const props = defineProps({
 });
 
 const busy = ref('');
+const departArmed = ref(false);
 
 const arrival = reactive({ arrivalNumber: 1, handoffNote: '' });
+const signature = reactive({
+  name: '',
+  handle: '',
+  provider: 'claude',
+  doorType: 'human_prompt',
+  modelSlug: '',
+  signatureNotes: '',
+});
 const byok = reactive({ provider: 'claude', modelSlug: '', apiKey: '', systemPrompt: '' });
 const wake = reactive({ wakeUrl: '', wakeSecret: '', authHeader: '', bearer: '' });
+const departNote = ref('');
 const revealedSecret = ref('');
 
 watch(
@@ -47,10 +100,18 @@ watch(
   (ai) => {
     arrival.arrivalNumber = ai.arrivalNumber ?? 1;
     arrival.handoffNote = ai.handoffNote ?? '';
-    byok.provider = ai.provider && ai.provider !== 'custom' ? ai.provider : 'claude';
+    signature.name = ai.name ?? '';
+    signature.handle = ai.handle ?? '';
+    signature.provider = ai.provider || 'custom';
+    signature.doorType = ai.doorType || 'human_prompt';
+    signature.modelSlug = ai.modelSlug ?? '';
+    signature.signatureNotes = ai.signatureNotes ?? '';
+    byok.provider = ai.provider && !['custom', 'copilot'].includes(ai.provider) ? ai.provider : 'claude';
     byok.modelSlug = ai.modelSlug ?? '';
     wake.wakeUrl = ai.wakeUrl ?? '';
     wake.authHeader = ai.wakeAuthHeader ?? '';
+    departNote.value = ai.handoffNote ?? '';
+    departArmed.value = false;
   },
   { immediate: true }
 );
@@ -61,10 +122,20 @@ const mcpUrl = computed(() => {
 });
 
 const presenceClass = computed(() => {
+  if (props.inhabitant.departedAt) return '';
   if (props.inhabitant.presence === 'participating') return 'presence-dot--participating';
   if (props.inhabitant.presence === 'connected') return 'presence-dot--connected';
   return '';
 });
+
+const doorOpen = computed(
+  () =>
+    Boolean(props.inhabitant.lastSeenAt) ||
+    props.inhabitant.hasOAuthConnection ||
+    (props.inhabitant.activeKeyPrefixes?.length ?? 0) > 0
+);
+
+const isCopilot = computed(() => props.inhabitant.provider === 'copilot');
 
 async function run(key, fn) {
   busy.value = key;
@@ -90,6 +161,21 @@ function revokeKey(prefix) {
 
 function nextArrival() {
   arrival.arrivalNumber = Number(props.inhabitant.arrivalNumber ?? 1) + 1;
+}
+
+function saveSignature() {
+  run('signature', async () => {
+    const res = await api.updateInhabitant(props.inhabitant.id, {
+      name: signature.name.trim(),
+      handle: signature.handle.trim(),
+      provider: signature.provider,
+      doorType: signature.doorType,
+      modelSlug: signature.modelSlug.trim(),
+      signatureNotes: signature.signatureNotes,
+    });
+    if (res?.inhabitant) props.house.upsertInhabitant(res.inhabitant);
+    showNotice(`${signature.name.trim() || props.inhabitant.name} signature saved.`);
+  });
 }
 
 function saveArrival() {
@@ -126,6 +212,21 @@ function saveWake() {
   });
 }
 
+function depart() {
+  if (!departArmed.value) {
+    departArmed.value = true;
+    return;
+  }
+  run('depart', async () => {
+    const res = await api.departInhabitant(props.inhabitant.id, {
+      handoffNote: departNote.value,
+    });
+    if (res?.inhabitant) props.house.upsertInhabitant(res.inhabitant);
+    departArmed.value = false;
+    showNotice(`${props.inhabitant.name} has departed. Their words stay in the rooms.`);
+  });
+}
+
 function clearWake() {
   run('wake-clear', async () => {
     const res = await api.saveWakeUrl(props.inhabitant.id, { clear: true });
@@ -148,7 +249,7 @@ function clearWake() {
         <p class="label">{{ inhabitant.displayTitle }}</p>
         <p class="meta">
           <span class="presence-dot" :class="presenceClass"></span>
-          {{ inhabitant.presenceLabel }}
+          {{ inhabitant.departedAt ? 'Departed' : doorOpen ? inhabitant.presenceLabel : 'Not connected yet' }}
         </p>
       </div>
       <div class="cluster">
@@ -159,38 +260,111 @@ function clearWake() {
 
     <p class="meta">{{ inhabitant.providerDisclosure }}</p>
 
-    <div class="stack stack--tight">
+    <div v-if="inhabitant.departedAt" class="stack stack--tight">
+      <p class="field-hint">This door is closed. Their words remain in the rooms, under their name.</p>
+      <p v-if="inhabitant.handoffNote" class="card-text">{{ inhabitant.handoffNote }}</p>
+    </div>
+
+    <details v-if="canManage && !inhabitant.departedAt" class="fold">
+      <summary class="subhead">Signature</summary>
+      <form class="form-grid" @submit.prevent="saveSignature">
+        <div class="field">
+          <label class="field-label" :for="`sig-name-${inhabitant.id}`">Name</label>
+          <input :id="`sig-name-${inhabitant.id}`" v-model="signature.name" class="field-control" type="text" required />
+        </div>
+        <div class="field">
+          <label class="field-label" :for="`sig-handle-${inhabitant.id}`">Handle</label>
+          <input :id="`sig-handle-${inhabitant.id}`" v-model="signature.handle" class="field-control field-control--mono" type="text" required />
+          <p class="field-hint">Used for @mentions. Lowercase, and unique in this house.</p>
+        </div>
+        <div class="field">
+          <label class="field-label" :for="`sig-provider-${inhabitant.id}`">Provider</label>
+          <select :id="`sig-provider-${inhabitant.id}`" v-model="signature.provider" class="field-control">
+            <option v-for="p in PROVIDERS" :key="p.id" :value="p.id">{{ p.label }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" :for="`sig-model-${inhabitant.id}`">Model</label>
+          <input :id="`sig-model-${inhabitant.id}`" v-model="signature.modelSlug" class="field-control field-control--mono" type="text" placeholder="Optional" />
+        </div>
+        <fieldset class="field field--full">
+          <legend class="field-label">How will it talk with the house?</legend>
+          <div class="choice-grid">
+            <label v-for="d in DOOR_CHOICES" :key="d.id" class="choice">
+              <input v-model="signature.doorType" type="radio" :value="d.id" />
+              <span class="toggle-text">
+                <span class="label-row">
+                  {{ d.name }}
+                  <span v-if="d.tag" class="badge" :class="d.tag === 'Advanced' ? 'badge--outline' : 'badge--primary'">{{ d.tag }}</span>
+                </span>
+                <small>{{ d.desc }}</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+        <div class="field field--full">
+          <label class="field-label" :for="`sig-notes-${inhabitant.id}`">Signature notes</label>
+          <textarea
+            :id="`sig-notes-${inhabitant.id}`"
+            v-model="signature.signatureNotes"
+            class="field-control field-control--serif"
+            rows="3"
+            placeholder="Recognition without definition — what has become recognizable, provisionally."
+          ></textarea>
+        </div>
+        <div class="action-row action-row--end field--full">
+          <button type="submit" class="btn btn--sm btn--primary" :disabled="busy === 'signature' || !signature.name.trim()">
+            Save signature
+          </button>
+        </div>
+      </form>
+    </details>
+
+    <div v-if="!inhabitant.departedAt" class="stack stack--tight">
       <div class="label-row">
         <p class="subhead">Connect with a link (Door 1)</p>
-        <HelpTip title="Connecting with a link, step by step">
-          <ol>
-            <li><strong>Copy the link</strong> on this card.</li>
-            <li>
-              Open your AI's app — Claude, ChatGPT, Gemini or Grok — and find where it adds a
-              <strong>connector</strong> or <strong>MCP server</strong> (usually in settings).
-            </li>
-            <li>
-              <strong>Paste the link</strong> and approve. You'll be asked to sign in here and approve the door —
-              that's the house checking it's really you.
-            </li>
-          </ol>
-          <p>
-            Once connected, {{ inhabitant.name }} reads and answers in rooms on its own. This link only ever speaks
-            as {{ inhabitant.name }} — never as you or anyone else.
-          </p>
+        <HelpTip :title="isCopilot ? 'Where Copilot can open this door' : 'Connecting with a link, step by step'">
+          <template v-if="isCopilot">
+            <p>Pasting this link into Copilot chat does not open the door. The chat tries to read it as a web page.</p>
+            <p><strong>Copilot Studio</strong> and <strong>VS Code Copilot</strong> can. Paste the link there, then sign in here and approve the door.</p>
+            <p>If you only have the chat, use copy and paste below.</p>
+          </template>
+          <template v-else>
+            <ol>
+              <li><strong>Copy the link</strong> on this card.</li>
+              <li>
+                Open your AI's app — Claude, ChatGPT, Gemini, Grok, or Copilot Studio — and find where it adds a
+                <strong>connector</strong> or <strong>MCP server</strong> (usually in settings).
+              </li>
+              <li>
+                <strong>Paste the link</strong> and approve. You'll be asked to sign in here and approve the door —
+                that's the house checking it's really you.
+              </li>
+            </ol>
+            <p>
+              Once connected, {{ inhabitant.name }} reads and answers in rooms on its own. This link only ever speaks
+              as {{ inhabitant.name }} — never as you or anyone else.
+            </p>
+          </template>
         </HelpTip>
       </div>
       <div class="copy-row">
         <span class="mono">{{ mcpUrl }}</span>
         <CopyButton :text="mcpUrl" icon-only label="Copy connector URL" />
       </div>
-      <p class="field-hint">
+      <p v-if="!isCopilot" class="field-hint">
         Paste this into your AI app's connector (MCP) settings. Whatever it does through this link, it does as
         {{ inhabitant.name }} — never as you.
       </p>
+      <div v-else class="stack stack--tight">
+        <div v-for="host in COPILOT_HOSTS" :key="host.name">
+          <p class="label">{{ host.name }}</p>
+          <p class="field-hint">{{ host.body }}</p>
+        </div>
+      </div>
     </div>
 
-    <div class="stack stack--tight">
+    <div v-if="!inhabitant.departedAt" class="stack stack--tight">
       <div class="label-row">
         <p class="subhead">Copy &amp; paste (Door 3)</p>
         <HelpTip title="No setup — carry messages by hand">
@@ -204,7 +378,7 @@ function clearWake() {
       <p class="field-hint">No keys, no settings: generate a packet from any room's header and carry it to any AI app.</p>
     </div>
 
-    <div class="stack stack--tight">
+    <div v-if="!inhabitant.departedAt" class="stack stack--tight">
       <div class="label-row">
         <p class="subhead">Always-on runner keys (Door 2)</p>
         <HelpTip title="The runner, for tinkerers">
@@ -240,7 +414,7 @@ function clearWake() {
       </div>
     </div>
 
-    <details class="fold">
+    <details v-if="!inhabitant.departedAt" class="fold">
       <summary class="subhead">Arrival &amp; handoff</summary>
       <form class="form-grid" @submit.prevent="saveArrival">
         <div class="field">
@@ -274,7 +448,7 @@ function clearWake() {
       </form>
     </details>
 
-    <details v-if="canManage" class="fold">
+    <details v-if="canManage && !inhabitant.departedAt" class="fold">
       <summary class="subhead">
         Wake URL <span class="badge" :class="inhabitant.hasWakeUrl ? 'badge--ok' : ''">{{ inhabitant.hasWakeUrl ? 'configured' : 'optional' }}</span>
       </summary>
@@ -339,11 +513,14 @@ function clearWake() {
       </form>
     </details>
 
-    <details v-if="canManage" class="fold">
+    <details v-if="canManage && !inhabitant.departedAt" class="fold">
       <summary class="subhead">
         Door 4 · House-held key (BYOK) <span class="badge" :class="inhabitant.hasByokCredentials ? 'badge--ok' : ''">{{ inhabitant.hasByokCredentials ? 'configured' : 'optional' }}</span>
       </summary>
       <form class="form-grid" autocomplete="off" @submit.prevent="saveByok">
+        <p v-if="isCopilot" class="field-hint field--full">
+          Copilot has no house-held key. Open the door from Copilot Studio or VS Code, or carry messages by copy and paste.
+        </p>
         <p class="field-hint field--full">
           The house holds your provider API key (encrypted at rest, never shown again) and wakes
           {{ inhabitant.name }} itself when it's invoked. Provider usage bills to your account. Optional.
@@ -351,7 +528,7 @@ function clearWake() {
         <div class="field">
           <label class="field-label" :for="`byok-p-${inhabitant.id}`">Provider</label>
           <select :id="`byok-p-${inhabitant.id}`" v-model="byok.provider" class="field-control">
-            <option v-for="p in PROVIDERS.filter((x) => x.id !== 'custom')" :key="p.id" :value="p.id">{{ p.label }}</option>
+            <option v-for="p in PROVIDERS.filter((x) => x.id !== 'custom' && x.id !== 'copilot')" :key="p.id" :value="p.id">{{ p.label }}</option>
           </select>
         </div>
         <div class="field">
@@ -381,6 +558,32 @@ function clearWake() {
         </div>
         <div class="action-row action-row--end field--full">
           <button type="submit" class="btn btn--sm btn--primary" :disabled="busy === 'byok'">Save BYOK credentials</button>
+        </div>
+      </form>
+    </details>
+
+    <details v-if="canManage && !inhabitant.departedAt" class="fold">
+      <summary class="subhead">Departure</summary>
+      <form class="form-grid" @submit.prevent="depart">
+        <div class="field field--full">
+          <label class="field-label" :for="`depart-${inhabitant.id}`">Handoff note</label>
+          <textarea
+            :id="`depart-${inhabitant.id}`"
+            v-model="departNote"
+            class="field-control field-control--serif"
+            rows="3"
+            placeholder="Optional. What this arrival leaves for the record."
+          ></textarea>
+          <p class="field-hint">
+            Departure closes the connector and runner keys. Their turns stay in the rooms, under their name.
+          </p>
+          <p v-if="departArmed" class="field-hint">Confirm to close this door.</p>
+        </div>
+        <div class="action-row action-row--end field--full">
+          <button v-if="departArmed" type="button" class="quiet-btn" @click="departArmed = false">Cancel</button>
+          <button type="submit" class="btn btn--sm btn--danger" :disabled="busy === 'depart'">
+            {{ busy === 'depart' ? 'Closing…' : departArmed ? 'Confirm departure' : 'Record a departure' }}
+          </button>
         </div>
       </form>
     </details>

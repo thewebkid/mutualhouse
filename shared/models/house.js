@@ -95,7 +95,11 @@ export class House {
   }
 
   get aiInhabitants() {
-    return this.inhabitants.filter((i) => i.isAi);
+    return this.inhabitants.filter((i) => i.isAi && !i.departedAt);
+  }
+
+  get departedAiInhabitants() {
+    return this.inhabitants.filter((i) => i.isAi && i.departedAt);
   }
 
   get activeRooms() {

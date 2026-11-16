@@ -68,6 +68,7 @@ async function aiWhoCanPost(tx, houseId, roomId, actorId) {
      FROM inhabitants i
      WHERE i.house_id = $1
        AND i.kind = 'ai'
+       AND i.departed_at IS NULL
        AND i.id <> $2
        AND (
          EXISTS (
@@ -108,7 +109,7 @@ export async function planInvocationTargets(
     }
     const { rows } = await tx.query(
       `SELECT id FROM inhabitants
-       WHERE house_id = $1 AND kind = 'ai' AND id = ANY($2::text[]) AND id <> $3`,
+       WHERE house_id = $1 AND kind = 'ai' AND departed_at IS NULL AND id = ANY($2::text[]) AND id <> $3`,
       [houseId, listed, actorId || '']
     );
     for (const row of rows) targets.set(row.id, INVOCATION_REASONS.PULSE);

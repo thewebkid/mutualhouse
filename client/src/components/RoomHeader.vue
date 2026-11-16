@@ -30,7 +30,9 @@ const PACE_LABELS = {
 
 // Alphabetical, so no one is listed first for standing
 const inhabitants = computed(() =>
-  [...props.house.inhabitants].sort((a, b) => a.name.localeCompare(b.name))
+  [...props.house.inhabitants]
+    .filter((i) => !i.departedAt)
+    .sort((a, b) => a.name.localeCompare(b.name))
 );
 const paceLabel = computed(() => {
   const base = PACE_LABELS[props.room.routingMode] ?? props.room.routingMode;
