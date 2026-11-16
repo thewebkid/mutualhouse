@@ -554,7 +554,7 @@ export function createInhabitantTokenVerifier(db, { originUrl, expectedInhabitan
             `SELECT k.*, i.house_id, i.kind
              FROM inhabitant_api_keys k
              JOIN inhabitants i ON i.id = k.inhabitant_id
-             WHERE k.key_hash = $1 AND k.revoked_at IS NULL
+             WHERE k.key_hash = $1 AND k.revoked_at IS NULL AND i.departed_at IS NULL
              LIMIT 1`,
             [keyHash]
           );
@@ -595,7 +595,11 @@ export function createInhabitantTokenVerifier(db, { originUrl, expectedInhabitan
           }
 
           const { rows: tokRows } = await db.query(
-            `SELECT * FROM oauth_tokens WHERE id = $1 AND revoked_at IS NULL LIMIT 1`,
+            `SELECT t.id
+             FROM oauth_tokens t
+             JOIN inhabitants i ON i.id = t.inhabitant_id
+             WHERE t.id = $1 AND t.revoked_at IS NULL AND i.departed_at IS NULL
+             LIMIT 1`,
             [claims.jti]
           );
           if (!tokRows[0]) {
@@ -636,7 +640,7 @@ export async function verifyDirectRunnerBearer(db, authHeader, expectedInhabitan
     `SELECT k.*, i.house_id, i.kind
      FROM inhabitant_api_keys k
      JOIN inhabitants i ON i.id = k.inhabitant_id
-     WHERE k.key_hash = $1 AND k.revoked_at IS NULL
+     WHERE k.key_hash = $1 AND k.revoked_at IS NULL AND i.departed_at IS NULL
      LIMIT 1`,
     [keyHash]
   );

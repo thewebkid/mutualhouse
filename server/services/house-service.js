@@ -48,9 +48,19 @@ export function mapInhabitantRow(row, activeKeyPrefixes = [], roomGrantsMap = {}
     roomGrants: roomGrantsMap,
     presence: computePresence(row),
     lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
+    hasOAuthConnection: Boolean(row.has_oauth_connection),
+    departedAt: row.departed_at ? new Date(row.departed_at).toISOString() : null,
     createdAt: new Date(row.created_at).toISOString(),
   };
 }
+
+function fail(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+const AI_DOOR_TYPES = new Set(['human_prompt', 'agent_loop', 'manual_packet', 'byok_hosted']);
 
 function computePresence(row) {
   if (row.presence === 'participating') {
@@ -154,6 +164,7 @@ export async function hydrateHouseForViewer(
     constRes,
     callRes,
     cursorRes,
+    oauthRes,
   ] = await Promise.all([
     db.query(`SELECT * FROM inhabitants WHERE house_id = $1 ORDER BY created_at ASC`, [houseRow.id]),
     db.query(
@@ -184,7 +195,16 @@ export async function hydrateHouseForViewer(
       `SELECT room_id, MAX(event_seq) AS max_seq FROM room_events WHERE house_id = $1 GROUP BY room_id`,
       [houseRow.id]
     ),
+    db.query(
+      `SELECT DISTINCT t.inhabitant_id
+       FROM oauth_tokens t
+       JOIN inhabitants i ON i.id = t.inhabitant_id
+       WHERE i.house_id = $1 AND t.revoked_at IS NULL`,
+      [houseRow.id]
+    ),
   ]);
+
+  const oauthIds = new Set(oauthRes.rows.map((row) => row.inhabitant_id));
 
   const prefixesByInh = {};
   for (const k of keyRes.rows) {
@@ -203,7 +223,11 @@ export async function hydrateHouseForViewer(
   }
 
   const inhabitants = inhRes.rows.map((r) =>
-    mapInhabitantRow(r, prefixesByInh[r.id] || [], roomGrantsByInh[r.id] || {})
+    mapInhabitantRow(
+      { ...r, has_oauth_connection: oauthIds.has(r.id) },
+      prefixesByInh[r.id] || [],
+      roomGrantsByInh[r.id] || {}
+    )
   );
 
   let resolvedViewerId = viewerInhabitantId;
@@ -438,4 +462,112 @@ export async function createAiInhabitantInDb(
   }
 
   return mapInhabitantRow(rows[0], [], {});
+}
+
+export async function updateInhabitantInDb(db, { houseId, inhabitantId, body = {} }) {
+  const { rows } = await db.query(
+    `SELECT * FROM inhabitants WHERE id = $1 AND house_id = $2 LIMIT 1`,
+    [inhabitantId, houseId]
+  );
+  const row = rows[0];
+  if (!row) throw fail(404, 'Inhabitant not found.');
+  if (row.departed_at) throw fail(409, 'This inhabitant has departed.');
+
+  const identityFields = ['name', 'handle', 'provider', 'doorType', 'modelSlug'];
+  if (identityFields.some((key) => body[key] !== undefined) && row.kind !== 'ai') {
+    throw fail(400, 'Only an AI inhabitant has a provider and a door.');
+  }
+
+  let name = row.name;
+  let handle = row.handle;
+  let provider = row.provider;
+  let disclosure = row.provider_disclosure;
+  let modelSlug = row.model_slug;
+  let doorType = row.door_type;
+  const arrivalNumber =
+    body.arrivalNumber !== undefined
+      ? Math.max(1, Number(body.arrivalNumber) || 1)
+      : row.arrival_number;
+  const handoffNote = body.handoffNote !== undefined ? String(body.handoffNote) : row.handoff_note;
+  const signatureNotes =
+    body.signatureNotes !== undefined ? String(body.signatureNotes) : row.signature_notes;
+
+  if (body.name !== undefined) {
+    name = String(body.name).trim();
+    if (!name) throw fail(400, 'Name is required.');
+  }
+  if (body.handle !== undefined) {
+    handle = slugify(body.handle);
+    if (!handle) throw fail(400, 'Handle is required.');
+    if (handle !== row.handle) {
+      const { rows: clash } = await db.query(
+        `SELECT id FROM inhabitants WHERE house_id = $1 AND handle = $2 AND id <> $3 LIMIT 1`,
+        [houseId, handle, inhabitantId]
+      );
+      if (clash[0]) throw fail(409, 'That handle is already in this house.');
+    }
+  }
+  if (body.provider !== undefined) {
+    provider = String(body.provider).trim().toLowerCase();
+    if (!provider) throw fail(400, 'Provider is required.');
+    disclosure = defaultProviderDisclosure(provider);
+  }
+  if (body.doorType !== undefined) {
+    if (!AI_DOOR_TYPES.has(body.doorType)) throw fail(400, 'Unknown door.');
+    doorType = body.doorType;
+  }
+  if (body.modelSlug !== undefined) {
+    const slug = String(body.modelSlug || '').trim();
+    modelSlug = slug || null;
+  }
+
+  await db.query(
+    `UPDATE inhabitants
+     SET name = $1, handle = $2, arrival_number = $3, handoff_note = $4, signature_notes = $5,
+         provider = $6, provider_disclosure = $7, model_slug = $8, door_type = $9
+     WHERE id = $10`,
+    [
+      name,
+      handle,
+      arrivalNumber,
+      handoffNote,
+      signatureNotes,
+      provider,
+      disclosure,
+      modelSlug,
+      doorType,
+      inhabitantId,
+    ]
+  );
+}
+
+export async function departAiInhabitantInDb(db, { houseId, inhabitantId, handoffNote }) {
+  await db.transaction(async (tx) => {
+    const { rows } = await tx.query(
+      `SELECT * FROM inhabitants WHERE id = $1 AND house_id = $2 AND kind = 'ai' LIMIT 1`,
+      [inhabitantId, houseId]
+    );
+    const row = rows[0];
+    if (!row) throw fail(404, 'AI inhabitant not found.');
+    if (row.departed_at) throw fail(409, 'This inhabitant has already departed.');
+    const note = handoffNote !== undefined ? String(handoffNote) : row.handoff_note;
+    await tx.query(
+      `UPDATE inhabitants
+       SET departed_at = NOW(), handoff_note = $1, presence = 'invocable'
+       WHERE id = $2`,
+      [note, inhabitantId]
+    );
+    await tx.query(
+      `UPDATE inhabitant_api_keys
+       SET revoked_at = NOW()
+       WHERE inhabitant_id = $1 AND revoked_at IS NULL`,
+      [inhabitantId]
+    );
+    await tx.query(
+      `UPDATE oauth_tokens
+       SET revoked_at = NOW()
+       WHERE inhabitant_id = $1 AND revoked_at IS NULL`,
+      [inhabitantId]
+    );
+  });
 }

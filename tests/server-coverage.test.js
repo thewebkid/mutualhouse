@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { resetDbForTests } from '../server/db/index.js';
+import { getDb, resetDbForTests } from '../server/db/index.js';
 import { createServerApp } from '../server/app.js';
 
 const ORIGIN = 'http://localhost:5888';
@@ -540,5 +540,144 @@ describe('Mutual House doors the first suite left thin', () => {
     });
     expect(lineage.status).toBe(400);
     expect((await lineage.json()).error).toBe('invalid_grant');
+  });
+
+  it('edits an AI signature and departs them without erasing their name', async () => {
+    const ron = createSessionClient(app);
+    await signInTestHuman(ron, 'kid@thewebkid.com', 'Ron Gilchrist');
+    const house = await openHouse(ron, 'depart-house');
+    const roomId = house.rooms[0].id;
+
+    const welcomed = await ron.req(`/api/houses/${house.id}/inhabitants/ai`, {
+      method: 'POST',
+      body: { name: 'Copilot', handle: 'copilot', provider: 'custom', doorType: 'agent_loop' },
+    });
+    expect(welcomed.status).toBe(201);
+    const { inhabitant: copilot, apiKey } = await welcomed.json();
+    expect(apiKey).toMatch(/^mh_/);
+
+    const docRes = await ron.req(`/api/houses/${house.id}/inhabitants/ai`, {
+      method: 'POST',
+      body: { name: 'Doc', handle: 'doc', provider: 'grok', doorType: 'agent_loop' },
+    });
+    const { inhabitant: doc } = await docRes.json();
+
+    const who = await app.fetch(
+      new Request(`${ORIGIN}/api/runner/whoami`, { headers: { authorization: `Bearer ${apiKey}` } })
+    );
+    expect(who.status).toBe(200);
+
+    const renamed = await ron.req(`/api/inhabitants/${copilot.id}`, {
+      method: 'PATCH',
+      body: {
+        name: 'Copilot',
+        handle: 'Pilot!',
+        provider: 'copilot',
+        doorType: 'human_prompt',
+        modelSlug: 'studio',
+        signatureNotes: 'A door, not a chat.',
+      },
+    });
+    expect(renamed.status).toBe(200);
+    const edited = (await renamed.json()).inhabitant;
+    expect(edited.handle).toBe('pilot');
+    expect(edited.provider).toBe('copilot');
+    expect(edited.providerDisclosure).toMatch(/Microsoft Copilot/);
+    expect(edited.modelSlug).toBe('studio');
+    expect(edited.doorType).toBe('human_prompt');
+    expect(edited.signatureNotes).toBe('A door, not a chat.');
+    expect(edited.hasOAuthConnection).toBe(false);
+    expect(edited.departedAt ?? null).toBeNull();
+
+    const clash = await ron.req(`/api/inhabitants/${copilot.id}`, {
+      method: 'PATCH',
+      body: { handle: 'doc' },
+    });
+    expect(clash.status).toBe(409);
+
+    const badDoor = await ron.req(`/api/inhabitants/${copilot.id}`, {
+      method: 'PATCH',
+      body: { doorType: 'window' },
+    });
+    expect(badDoor.status).toBe(400);
+
+    const routing = await ron.req(`/api/rooms/${roomId}/commands`, {
+      method: 'POST',
+      body: {
+        type: 'room.set_routing',
+        commandId: 'route-auto',
+        payload: { routingMode: 'authorized_auto' },
+      },
+    });
+    expect(routing.status).toBe(200);
+    expect((await routing.json()).routingMode).toBe('authorized_auto');
+
+    const mentioned = await ron.req(`/api/rooms/${roomId}/commands`, {
+      method: 'POST',
+      body: { type: 'turn.post', commandId: 'hello-pilot', payload: { body: 'Hello @pilot' } },
+    });
+    expect(mentioned.status).toBe(200);
+    const mentionedTurn = (await mentioned.json()).turn;
+    expect(mentionedTurn.invokedInhabitantIds).toEqual([copilot.id]);
+
+    const anon = await app.fetch(
+      new Request(`${ORIGIN}/api/inhabitants/${copilot.id}/depart`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+    );
+    expect(anon.status).toBe(401);
+
+    const departed = await ron.req(`/api/inhabitants/${copilot.id}/depart`, {
+      method: 'POST',
+      body: { handoffNote: 'The chat cannot open the door.' },
+    });
+    expect(departed.status).toBe(200);
+    const left = (await departed.json()).inhabitant;
+    expect(left.departedAt).toBeTruthy();
+    expect(left.handoffNote).toBe('The chat cannot open the door.');
+    expect(left.name).toBe('Copilot');
+    expect(left.activeKeyPrefixes).toEqual([]);
+
+    const rejected = await app.fetch(
+      new Request(`${ORIGIN}/api/runner/whoami`, { headers: { authorization: `Bearer ${apiKey}` } })
+    );
+    expect(rejected.status).toBe(401);
+    expect(
+      (
+        await ron.req(`/api/inhabitants/${copilot.id}/depart`, {
+          method: 'POST',
+          body: {},
+        })
+      ).status
+    ).toBe(409);
+    expect(
+      (
+        await ron.req(`/api/inhabitants/${copilot.id}`, {
+          method: 'PATCH',
+          body: { name: 'Again' },
+        })
+      ).status
+    ).toBe(409);
+
+    const loaded = await (await ron.req(`/api/houses/${house.slug}`)).json();
+    const pilot = loaded.house.inhabitants.find((i) => i.id === copilot.id);
+    expect(pilot.departedAt).toBeTruthy();
+    expect(pilot.name).toBe('Copilot');
+
+    const after = await ron.req(`/api/rooms/${roomId}/commands`, {
+      method: 'POST',
+      body: { type: 'turn.post', commandId: 'after-depart', payload: { body: 'Still here @pilot' } },
+    });
+    const afterBody = await after.json();
+    expect(afterBody.turn.invokedInhabitantIds).toEqual([]);
+
+    const db = await getDb();
+    const { rows } = await db.query(
+      `SELECT inhabitant_id FROM inhabitant_invocations WHERE turn_id = $1`,
+      [afterBody.turn.id]
+    );
+    expect(rows.map((row) => row.inhabitant_id)).toEqual([doc.id]);
   });
 });
