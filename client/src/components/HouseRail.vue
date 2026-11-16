@@ -8,6 +8,7 @@ import { createRoomInHouse, setInhabitantParticipation } from '../lib/mut/house-
 import AppIcon from './AppIcon.vue';
 import HelpTip from './HelpTip.vue';
 import InhabitantMark from './InhabitantMark.vue';
+import DepartAiModal from './DepartAiModal.vue';
 import InhabitantProfileModal from './InhabitantProfileModal.vue';
 import WelcomeAiModal from './WelcomeAiModal.vue';
 
@@ -106,6 +107,7 @@ function openProfile(inh) {
 
 const menu = ref(null); // { inh, x, y }
 const menuEl = ref(null);
+let menuToken = 0;
 
 const menuActions = computed(() => {
   const inh = menu.value?.inh;
@@ -121,24 +123,32 @@ const menuActions = computed(() => {
       });
     }
     actions.push({ id: 'connection', label: 'Connection & webhook' });
+    actions.push({ id: 'remove', label: 'Remove', danger: true });
   }
   actions.push({ id: 'handle', label: 'Copy @handle' });
   return actions;
 });
 
+const departOpen = ref(false);
+const departTarget = ref(null);
+
 function placeMenu(inh, x, y) {
-  const width = 232;
-  const height = 16 + 40 * 5;
-  menu.value = {
-    inh,
-    x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
-    y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
-  };
+  closeMenu();
+  const token = ++menuToken;
+  menu.value = { inh, x, y };
   document.addEventListener('pointerdown', onMenuPointer);
   document.addEventListener('keydown', onMenuKey);
   window.addEventListener('scroll', closeMenu, { capture: true });
   window.addEventListener('resize', closeMenu);
-  nextTick(() => menuEl.value?.querySelector('button')?.focus());
+  nextTick(() => {
+    const el = menuEl.value;
+    if (token !== menuToken || !el || !menu.value) return;
+    const rect = el.getBoundingClientRect();
+    const left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+    const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+    if (left !== x || top !== y) menu.value = { inh, x: left, y: top };
+    el.querySelector('button')?.focus();
+  });
 }
 
 function openMenuAt(inh, ev) {
@@ -155,6 +165,7 @@ function openMenuFrom(inh, ev) {
 }
 
 function closeMenu() {
+  menuToken += 1;
   menu.value = null;
   document.removeEventListener('pointerdown', onMenuPointer);
   document.removeEventListener('keydown', onMenuKey);
@@ -199,7 +210,10 @@ async function runAction(action) {
     if (action === 'profile') openProfile(inh);
     else if (action === 'add') openWelcome();
     else if (action === 'connection') openWelcome(inh);
-    else if (action === 'participation') {
+    else if (action === 'remove') {
+      departTarget.value = inh;
+      departOpen.value = true;
+    } else if (action === 'participation') {
       const mode = inh.participationMode === 'readonly' ? 'contribute' : 'readonly';
       await setInhabitantParticipation(inh.id, { mode });
       showNotice(mode === 'readonly' ? `${inh.name} now reads only.` : `${inh.name} can contribute.`);
@@ -399,7 +413,14 @@ function inhabitantTitle(inh) {
       :aria-label="`Actions for ${menu.inh.name}`"
       :style="{ left: `${menu.x}px`, top: `${menu.y}px` }"
     >
-      <button v-for="a in menuActions" :key="a.id" type="button" role="menuitem" @click="runAction(a.id)">
+      <button
+        v-for="a in menuActions"
+        :key="a.id"
+        type="button"
+        role="menuitem"
+        :class="{ 'is-danger': a.danger }"
+        @click="runAction(a.id)"
+      >
         {{ a.label }}
       </button>
     </div>
@@ -407,6 +428,7 @@ function inhabitantTitle(inh) {
 
   <WelcomeAiModal :house="house" :open="welcomeOpen" :inhabitant="welcomeTarget" @close="welcomeOpen = false" />
   <InhabitantProfileModal :house="house" :open="profileOpen" :inhabitant="profileTarget" @close="profileOpen = false" />
+  <DepartAiModal :house="house" :open="departOpen" :inhabitant="departTarget" @close="departOpen = false" />
 </template>
 
 <style lang="scss" scoped>

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDbForTests } from '../server/db/index.js';
 import { createServerApp } from '../server/app.js';
-import { normalizeBearerSecret } from '../shared/lib/ai-hosts.js';
+import { getAiHost, normalizeBearerSecret, wakeHostFor } from '../shared/lib/ai-hosts.js';
 import { formatClaudeRoutineBody } from '../server/services/invocations.js';
 import { sha256HexNode } from '../server/services/crypto.js';
 
@@ -227,6 +227,46 @@ describe('Welcoming AI onboarding', () => {
     const body = JSON.parse(formatClaudeRoutineBody({ inhabitantId: 'inh_1', reason: 'invoked', room: { slug: 'common-room' }, turn: { bodyExcerpt: 'hello' } }));
     expect(body.text).toMatch(/inh_1/);
     expect(body.mutualhouse.reason).toBe('invoked');
+    const fields = getAiHost('grok_bot').webhookFields;
+    expect(fields.map((field) => field.id)).toEqual(['wakeUrl', 'bearer']);
+    expect(fields.map((field) => field.label)).toEqual(['Webhook POST to URL', 'Webhook key']);
+    expect(getAiHost('chatgpt').connectorSteps.join(' ')).toMatch(/Plugins/);
+    expect(getAiHost('chatgpt').connectorSteps.join(' ')).toMatch(/Custom MCP Server/);
+    expect(getAiHost('chatgpt').connectorSteps.join(' ')).toMatch(/Server URL/);
+    expect(wakeHostFor({ hostKind: 'grok_bot' }).id).toBe('grok_bot');
+    expect(wakeHostFor({ hostKind: 'custom', wakeUrl: 'https://api2.cursor.sh/automations/webhook/abc' }).id).toBe('grok_bot');
+    expect(wakeHostFor({ hostKind: 'claude' }).id).toBe('claude');
+  });
+
+  it('saves a GrokBot webhook without asking for an HMAC or header name', async () => {
+    const ron = createSessionClient(app);
+    await signIn(ron, 'ron@example.com', 'Ron');
+    const house = await (await ron.req('/api/houses', { method: 'POST', body: { name: 'The Now', slug: 'grok-wake' } })).json();
+    const created = await (
+      await ron.req(`/api/houses/${house.house.id}/inhabitants/ai`, {
+        method: 'POST',
+        body: { name: 'Doc', provider: 'grok' },
+      })
+    ).json();
+    expect(created.inhabitant.hostKind).toBe('custom');
+
+    const saved = await ron.req(`/api/inhabitants/${created.inhabitant.id}/wake`, {
+      method: 'PUT',
+      body: {
+        wakeUrl: 'https://api2.cursor.sh/automations/webhook/abc',
+        bearer: 'Authorization: Bearer sk-test-key',
+        wakePreset: 'grok_bot',
+      },
+    });
+    expect(saved.status).toBe(200);
+    const body = await saved.json();
+    expect(body.wakeSecret).toMatch(/^whsec_/);
+    expect(body.wake.authHeader).toBe('Authorization');
+    expect(body.inhabitant.hostKind).toBe('grok_bot');
+    expect(body.inhabitant.wakePreset).toBe('grok_bot');
+    expect(body.inhabitant.wakeAuthHeader).toBe('Authorization');
+    expect(body.inhabitant.hasWakeBearer).toBe(true);
+    expect(JSON.stringify(body.inhabitant)).not.toContain('sk-test-key');
   });
 
   it('projects a gravatar hash without the email', async () => {

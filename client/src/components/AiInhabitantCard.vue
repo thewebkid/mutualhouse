@@ -68,6 +68,7 @@ import {
   revokeInhabitantRunnerKey,
   setInhabitantParticipation,
 } from '../lib/mut/house-orchestration.js';
+import { wakeHostFor } from '@shared/lib/ai-hosts.js';
 import AiWakeForm, { hostHasWakeFields, wakeSectionTitle } from './AiWakeForm.vue';
 import AppIcon from './AppIcon.vue';
 import ParticipationChoice from './ParticipationChoice.vue';
@@ -211,14 +212,22 @@ function changeParticipation(mode) {
   });
 }
 
-const hostKind = computed(() => props.inhabitant.hostKind || 'custom');
-const hasHostFields = computed(() => hostHasWakeFields(hostKind.value));
-const wakeTitle = computed(() => wakeSectionTitle(hostKind.value));
+const wakeHost = computed(() => wakeHostFor(props.inhabitant));
+const hasHostFields = computed(() => hostHasWakeFields(wakeHost.value.id));
+const wakeTitle = computed(() => wakeSectionTitle(wakeHost.value.id));
+const wakeBadge = computed(() => {
+  if (props.inhabitant.hasWakeUrl) return 'configured';
+  return wakeHost.value.id === 'grok_bot' ? 'recommended' : 'optional';
+});
+const wakeBadgeClass = computed(() => {
+  if (props.inhabitant.hasWakeUrl) return 'badge--ok';
+  return wakeHost.value.id === 'grok_bot' ? 'badge--primary' : '';
+});
 const hostNote = computed(() => {
-  if (hostKind.value === 'grok_com') {
+  if (wakeHost.value.id === 'grok_com') {
     return 'Grok in the browser checks its inbox when someone messages it, and catches up then. It cannot be woken in the background; Grok Bot can.';
   }
-  if (hostKind.value === 'chatgpt') {
+  if (wakeHost.value.id === 'chatgpt') {
     return 'ChatGPT can subscribe to MCP events, so there is nothing to paste. A webhook of your own is optional.';
   }
   return '';
@@ -460,11 +469,11 @@ function depart() {
 
     <details v-if="canManage && !inhabitant.departedAt" class="fold">
       <summary class="subhead">
-        {{ wakeTitle }} <span class="badge" :class="inhabitant.hasWakeUrl ? 'badge--ok' : ''">{{ inhabitant.hasWakeUrl ? 'configured' : 'optional' }}</span>
+        {{ wakeTitle }} <span class="badge" :class="wakeBadgeClass">{{ wakeBadge }}</span>
       </summary>
       <div class="stack stack--tight">
         <p v-if="hostNote" class="field-hint">{{ hostNote }}</p>
-        <AiWakeForm v-if="hostKind !== 'grok_com'" :house="house" :inhabitant="inhabitant" :custom="!hasHostFields" />
+        <AiWakeForm v-if="wakeHost.id !== 'grok_com'" :house="house" :inhabitant="inhabitant" :custom="!hasHostFields" />
       </div>
     </details>
 

@@ -385,7 +385,7 @@ export function validateWakeHeaderName(raw) {
  */
 export async function saveInhabitantWake(db, inhabitantId, input = {}) {
   const { rows } = await db.query(
-    `SELECT id, kind, wake_url, encrypted_wake_secret, wake_auth_header, encrypted_wake_bearer, wake_preset
+    `SELECT id, kind, host_kind, wake_url, encrypted_wake_secret, wake_auth_header, encrypted_wake_bearer, wake_preset
      FROM inhabitants WHERE id = $1 LIMIT 1`,
     [inhabitantId]
   );
@@ -438,15 +438,20 @@ export async function saveInhabitantWake(db, inhabitantId, input = {}) {
     if (bearer && !authHeader) authHeader = 'Authorization';
   }
 
+  // A GrokBot webhook saved on an unclassified inhabitant is a GrokBot.
+  let hostKind = row.host_kind || 'custom';
+  if (hostKind === 'custom' && wakePreset === 'grok_bot') hostKind = 'grok_bot';
+
   await db.query(
     `UPDATE inhabitants
      SET wake_url = $1,
          encrypted_wake_secret = $2,
          wake_auth_header = $3,
          encrypted_wake_bearer = $4,
-         wake_preset = $5
-     WHERE id = $6`,
-    [wakeUrl, encryptedSecret, authHeader, encryptedBearer, wakePreset, inhabitantId]
+         wake_preset = $5,
+         host_kind = $6
+     WHERE id = $7`,
+    [wakeUrl, encryptedSecret, authHeader, encryptedBearer, wakePreset, hostKind, inhabitantId]
   );
 
   return {
