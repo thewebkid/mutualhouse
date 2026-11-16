@@ -375,6 +375,49 @@ ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS encrypted_wake_secret TEXT;
 ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS wake_auth_header TEXT;
 ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS encrypted_wake_bearer TEXT;
 ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS departed_at TIMESTAMPTZ;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS host_kind TEXT NOT NULL DEFAULT 'custom';
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS wake_preset TEXT NOT NULL DEFAULT 'custom';
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS participation_mode TEXT NOT NULL DEFAULT 'contribute';
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS participation_locked BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT '';
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS hobbies JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS avatar_r2_key TEXT;
+ALTER TABLE inhabitants ADD COLUMN IF NOT EXISTS use_gravatar BOOLEAN NOT NULL DEFAULT TRUE;
+
+CREATE TABLE IF NOT EXISTS mcp_event_subscriptions (
+  id TEXT PRIMARY KEY,
+  house_id TEXT NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
+  inhabitant_id TEXT NOT NULL REFERENCES inhabitants(id) ON DELETE CASCADE,
+  event_name TEXT NOT NULL,
+  callback_url TEXT NOT NULL,
+  encrypted_secret TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (inhabitant_id, event_name, callback_url)
+);
+
+UPDATE inhabitants
+SET grants = grants || '["ai.invite"]'::jsonb
+WHERE kind = 'human' AND NOT (grants ? 'ai.invite');
+
+UPDATE inhabitants
+SET host_kind = CASE
+      WHEN wake_url ILIKE '%api.anthropic.com%' THEN 'claude'
+      WHEN wake_url ILIKE '%api2.cursor.sh%' OR wake_url ILIKE '%cursor.sh%' THEN 'grok_bot'
+      WHEN provider = 'openai' THEN 'chatgpt'
+      WHEN provider = 'claude' THEN 'claude'
+      WHEN provider = 'grok' THEN 'grok_com'
+      WHEN provider = 'copilot' THEN 'copilot'
+      ELSE host_kind
+    END,
+    wake_preset = CASE
+      WHEN wake_url ILIKE '%api.anthropic.com%' THEN 'claude_routine'
+      WHEN wake_url ILIKE '%cursor.sh%' THEN 'grok_bot'
+      WHEN provider = 'openai' THEN 'mcp_events'
+      WHEN provider = 'grok' AND wake_url IS NULL THEN 'none'
+      ELSE wake_preset
+    END
+WHERE kind = 'ai' AND host_kind = 'custom';
 
 CREATE TABLE IF NOT EXISTS inhabitant_invocations (
   id TEXT PRIMARY KEY,

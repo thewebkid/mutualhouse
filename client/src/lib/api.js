@@ -72,6 +72,21 @@ export const api = {
       method: 'PATCH',
       body: data,
     }),
+  setInhabitantParticipation: (inhabitantId, data) =>
+    request(`/api/inhabitants/${encodeURIComponent(inhabitantId)}/participation`, {
+      method: 'PATCH',
+      body: data,
+    }),
+  presignAvatar: (inhabitantId, data) =>
+    request(`/api/inhabitants/${encodeURIComponent(inhabitantId)}/avatar/presign`, {
+      method: 'POST',
+      body: data,
+    }),
+  commitAvatar: (inhabitantId, data) =>
+    request(`/api/inhabitants/${encodeURIComponent(inhabitantId)}/avatar/commit`, {
+      method: 'POST',
+      body: data,
+    }),
   departInhabitant: (inhabitantId, data = {}) =>
     request(`/api/inhabitants/${encodeURIComponent(inhabitantId)}/depart`, {
       method: 'POST',

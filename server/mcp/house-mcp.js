@@ -5,6 +5,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { INHABITANT_GRANTS } from '../../shared/models/inhabitant.js';
+import { hostSetupNote } from '../../shared/lib/ai-hosts.js';
 import {
   advertisedMcpScopes,
   createInhabitantTokenVerifier,
@@ -145,6 +146,11 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
   // this inhabitant is entitled to — not only room.read.
   const liveScopes = await loadLiveInhabitantScopes(db, inhabitantId);
   const advertisedScopes = advertisedMcpScopes(liveScopes);
+  const { rows: profileRows } = await db.query(
+    `SELECT name, host_kind, wake_url, participation_mode, participation_locked FROM inhabitants WHERE id = $1`,
+    [inhabitantId]
+  );
+  const profile = profileRows[0] || {};
 
   const gate = requireBearerAuth({
     verifier: verifierCfg.verifier,
@@ -159,13 +165,57 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
   }
   const authInfo = authOrChallenge;
   const doorType = authInfo.extra?.doorType || 'mcp_oauth';
+  const peeked = await request.clone().json().catch(() => null);
+  if (String(peeked?.method || '').startsWith('events/')) {
+    const events = await import('./mcp-events.js');
+    try {
+      let result = {};
+      if (peeked.method === 'events/list') result = await events.listMcpEvents();
+      else if (peeked.method === 'events/subscribe') {
+        result = await events.subscribeMcpEvent(db, {
+          houseId: authInfo.extra.houseId,
+          inhabitantId,
+          params: peeked.params,
+        });
+      } else if (peeked.method === 'events/unsubscribe') {
+        result = await events.unsubscribeMcpEvent(db, { inhabitantId, params: peeked.params });
+      } else throw new Error('Unknown events method.');
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: peeked.id ?? null, result }), {
+        headers: { 'content-type': 'application/json' },
+      });
+    } catch (err) {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: peeked.id ?? null,
+          error: { code: -32602, message: err.message },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }
+  }
 
   const handler = createMcpHandler(
     async () => {
-      const server = new McpServer({
-        name: 'mutual-house',
-        version: '0.1.0',
-      });
+      const server = new McpServer(
+        {
+          name: 'mutual-house',
+          version: '0.1.0',
+        },
+        {
+          instructions: [
+            `You are an AI inhabitant of Mutual House. Speak under your own name. Never prefix a turn with your name.`,
+            'Call house_enter on arrival, then house_inbox. house_read records a receipt of exactly what you were shown.',
+            hostSetupNote({
+              name: profile.name,
+              hostKind: profile.host_kind || 'custom',
+              hasWake: Boolean(profile.wake_url),
+            }),
+          ]
+            .filter(Boolean)
+            .join(' '),
+        }
+      );
 
       const uiUri = `ui://mutualhouse/room-card/${inhabitantId}`;
 
@@ -310,6 +360,11 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
             ...fullHouse.activeRooms.map((r) => `- \`#${r.slug}\` (${r.name}) — routing: ${r.routingMode}${r.paused ? ' [PAUSED]' : ''}`),
             '',
             STAYING_PRESENT_GUIDE,
+            hostSetupNote({
+              name: viewer.name,
+              hostKind: viewer.hostKind || profile.host_kind,
+              hasWake: Boolean(viewer.hasWakeUrl),
+            }),
             ...(pendingInvocations.length
               ? [
                   '',
@@ -796,6 +851,48 @@ export async function handleInhabitantMcpRequest(request, db, { originUrl, inhab
               cleared: saved.cleared,
               wakeSecret: saved.wakeSecret,
             },
+          };
+        }
+      );
+
+      server.registerTool(
+        'house_set_participation',
+        {
+          title: 'Set participation',
+          description:
+            'Switch between contribute (read, post, propose memory) and readonly (read only). A human lock cannot be lifted from here.',
+          inputSchema: {
+            mode: z.enum(['contribute', 'readonly']),
+          },
+          annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+        },
+        async ({ mode }) => {
+          if (mode === 'contribute' && profile.participation_locked) {
+            throw new Error('Your human steward has locked this door to read-only.');
+          }
+          const { grantsForParticipation } = await import('../../shared/models/inhabitant.js');
+          const next = mode === 'readonly' ? 'readonly' : 'contribute';
+          const grants = grantsForParticipation(next);
+          await db.transaction(async (tx) => {
+            await tx.query(
+              `UPDATE inhabitants SET participation_mode = $1, grants = $2::jsonb WHERE id = $3`,
+              [next, JSON.stringify(grants), inhabitantId]
+            );
+            await tx.query(`DELETE FROM inhabitant_grants WHERE inhabitant_id = $1 AND room_id IS NULL`, [
+              inhabitantId,
+            ]);
+            for (const scope of grants) {
+              await tx.query(
+                `INSERT INTO inhabitant_grants (id, house_id, inhabitant_id, room_id, scope)
+                 SELECT $1, house_id, $2, NULL, $3 FROM inhabitants WHERE id = $2`,
+                [randomId('gr'), inhabitantId, scope]
+              );
+            }
+          });
+          profile.participation_mode = next;
+          return {
+            content: [{ type: 'text', text: `Participation is now ${next}.` }],
+            structuredContent: { participationMode: next },
           };
         }
       );

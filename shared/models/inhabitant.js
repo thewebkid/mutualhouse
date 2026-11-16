@@ -10,6 +10,7 @@ export const INHABITANT_GRANTS = Object.freeze({
   CONSTITUTION_RATIFY: 'constitution.ratify',
   CREDENTIAL_REVOKE: 'credential.revoke',
   HOUSE_MANAGE: 'house.manage',
+  AI_INVITE: 'ai.invite',
 });
 
 export const HUMAN_STEWARD_DEFAULT_GRANTS = Object.freeze([
@@ -22,6 +23,7 @@ export const HUMAN_STEWARD_DEFAULT_GRANTS = Object.freeze([
   INHABITANT_GRANTS.CONSTITUTION_RATIFY,
   INHABITANT_GRANTS.CREDENTIAL_REVOKE,
   INHABITANT_GRANTS.HOUSE_MANAGE,
+  INHABITANT_GRANTS.AI_INVITE,
 ]);
 
 export const HUMAN_MEMBER_DEFAULT_GRANTS = Object.freeze([
@@ -32,6 +34,7 @@ export const HUMAN_MEMBER_DEFAULT_GRANTS = Object.freeze([
   INHABITANT_GRANTS.SEAL_RELEASE,
   INHABITANT_GRANTS.ROOM_PAUSE,
   INHABITANT_GRANTS.CONSTITUTION_RATIFY,
+  INHABITANT_GRANTS.AI_INVITE,
 ]);
 
 export const AI_DEFAULT_GRANTS = Object.freeze([
@@ -57,6 +60,11 @@ export class Inhabitant {
     'lastSeenAt',
     'grants',
     'roomGrants',
+    'bio',
+    'hobbies',
+    'avatarUrl',
+    'gravatarHash',
+    'useGravatar',
     'createdAt',
   ];
 
@@ -65,12 +73,22 @@ export class Inhabitant {
   grants = [];
   roomGrants = {};
   presence = 'invocable';
+  bio = '';
+  hobbies = [];
+  avatarUrl = null;
+  gravatarHash = null;
+  useGravatar = true;
 
   constructor(def = {}, house = null) {
     this.house = house;
     buildInstanceFromDef(this, def);
     this.grants = Array.isArray(def.grants) ? [...def.grants] : [];
     this.roomGrants = def.roomGrants && typeof def.roomGrants === 'object' ? { ...def.roomGrants } : {};
+    this.bio = def.bio ?? '';
+    this.hobbies = Array.isArray(def.hobbies) ? [...def.hobbies] : [];
+    this.avatarUrl = def.avatarUrl ?? null;
+    this.gravatarHash = def.gravatarHash ?? null;
+    this.useGravatar = def.useGravatar !== false;
     if (house?.id && !this.houseId) {
       this.houseId = house.id;
     }
@@ -162,6 +180,10 @@ export class AiInhabitant extends Inhabitant {
     'activeKeyPrefixes',
     'hasOAuthConnection',
     'departedAt',
+    'hostKind',
+    'wakePreset',
+    'participationMode',
+    'participationLocked',
   ];
 
   kind = 'ai';
@@ -180,6 +202,10 @@ export class AiInhabitant extends Inhabitant {
   activeKeyPrefixes = [];
   hasOAuthConnection = false;
   departedAt = null;
+  hostKind = 'custom';
+  wakePreset = 'custom';
+  participationMode = 'contribute';
+  participationLocked = false;
 
   constructor(def = {}, house = null) {
     super({ ...def, kind: 'ai' }, house);
@@ -199,6 +225,10 @@ export class AiInhabitant extends Inhabitant {
     this.hasWakeBearer = Boolean(def.hasWakeBearer);
     this.hasOAuthConnection = Boolean(def.hasOAuthConnection);
     this.departedAt = def.departedAt ?? null;
+    this.hostKind = def.hostKind || 'custom';
+    this.wakePreset = def.wakePreset || 'custom';
+    this.participationMode = def.participationMode === 'readonly' ? 'readonly' : 'contribute';
+    this.participationLocked = Boolean(def.participationLocked);
     this.mcpEndpointPath =
       def.mcpEndpointPath ?? (this.id ? `/mcp/inh/${this.id}` : null);
     this.activeKeyPrefixes = Array.isArray(def.activeKeyPrefixes)
@@ -228,6 +258,32 @@ export class AiInhabitant extends Inhabitant {
   get steward() {
     return this.house?.getInhabitant(this.stewardInhabitantId) ?? null;
   }
+}
+
+export function activeAiCountForSteward(house, stewardId) {
+  return (house?.inhabitants || house?.aiInhabitants || []).filter(
+    (row) =>
+      (row.kind === 'ai' || row.isAi) &&
+      !row.departedAt &&
+      row.stewardInhabitantId === stewardId
+  ).length;
+}
+
+export function canInviteAi(viewer, house) {
+  if (!viewer?.isHuman || !viewer.can(INHABITANT_GRANTS.AI_INVITE)) return false;
+  if (viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) return true;
+  return activeAiCountForSteward(house, viewer.id) < 1;
+}
+
+export function canManageAi(viewer, ai) {
+  if (!viewer?.isHuman || !ai) return false;
+  if (viewer.can(INHABITANT_GRANTS.HOUSE_MANAGE)) return true;
+  return ai.stewardInhabitantId === viewer.id || ai.steward_inhabitant_id === viewer.id;
+}
+
+export function grantsForParticipation(mode) {
+  if (mode === 'readonly') return [INHABITANT_GRANTS.ROOM_READ];
+  return [...AI_DEFAULT_GRANTS];
 }
 
 export function defaultProviderDisclosure(provider = 'custom') {

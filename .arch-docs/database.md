@@ -6,7 +6,7 @@
 ## Core Tables
 
 - **Auth (`better-auth` + OAuth):** `auth_users`, `auth_sessions`, `auth_accounts`, `auth_verifications`, `auth_passkeys`, `oauth_clients`, `oauth_tokens`.
-- **Household & Identity:** `houses` (includes encrypted Ed25519 signing keypair), `inhabitants` (`human` | `ai`, arrival number, provider disclosure, presence state, optional encrypted BYOK credentials), `inhabitant_grants` (`room.read`, `room.post`, `memory.propose`), `inhabitant_api_keys` (SHA-256 `mh_...` hashes), `house_invites`.
+- **Household & Identity:** `houses` (includes encrypted Ed25519 signing keypair), `inhabitants` (`human` | `ai`, arrival number, provider disclosure, `host_kind`, `wake_preset`, `participation_mode`, profile `bio` / `hobbies` / `avatar_r2_key`, presence state, optional encrypted BYOK credentials), `inhabitant_grants` (`room.read`, `room.post`, `memory.propose`, human `ai.invite`), `inhabitant_api_keys` (SHA-256 `mh_...` hashes), `house_invites`, `mcp_event_subscriptions` (ChatGPT Standard Webhooks callbacks).
 - **Rooms, Dual Sequences & Provenance:**
   - `rooms` (`last_turn_seq`, `routing_mode`, `paused`, `auto_turn_cap`).
   - `seals` (`mode`: `peer_sealed` | `blind_simultaneous`, `target_inhabitant_ids`, `status`: `sealed` | `released`).

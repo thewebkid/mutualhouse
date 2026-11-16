@@ -467,6 +467,34 @@ export async function registerAiInhabitant(data) {
   return { inhabitant: inh, apiKey: res.apiKey };
 }
 
+export async function setInhabitantParticipation(inhabitantId, data) {
+  const house = globalState.activeHouse;
+  const res = await api.setInhabitantParticipation(inhabitantId, data);
+  if (house && res.inhabitant) house.upsertInhabitant(res.inhabitant);
+  return res;
+}
+
+export async function updateInhabitantProfile(inhabitantId, data) {
+  const house = globalState.activeHouse;
+  const res = await api.updateInhabitant(inhabitantId, data);
+  if (house && res.inhabitant) house.upsertInhabitant(res.inhabitant);
+  return res;
+}
+
+export async function uploadInhabitantAvatar(inhabitantId, file) {
+  const house = globalState.activeHouse;
+  const signed = await api.presignAvatar(inhabitantId, { mimeType: file.type, byteLength: file.size });
+  const put = await fetch(signed.uploadUrl, {
+    method: 'PUT',
+    headers: { 'content-type': file.type },
+    body: file,
+  });
+  if (!put.ok) throw new Error('Avatar upload failed.');
+  const res = await api.commitAvatar(inhabitantId, { r2Key: signed.r2Key });
+  if (house && res.inhabitant) house.upsertInhabitant(res.inhabitant);
+  return res;
+}
+
 export async function mintInhabitantRunnerKey(inhabitantId, label = 'Runner Key') {
   const house = globalState.activeHouse;
   const res = await api.mintAgentKey(inhabitantId, label);

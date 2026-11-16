@@ -3,10 +3,13 @@ import {
   INHABITANT_GRANTS,
   HUMAN_STEWARD_DEFAULT_GRANTS,
   AI_DEFAULT_GRANTS,
+  canInviteAi,
+  grantsForParticipation,
   defaultProviderDisclosure,
 } from '../../shared/models/index.js';
+import { defaultWakePresetForHost, isHostKind, providerForHost } from '../../shared/lib/ai-hosts.js';
 import { slugify } from '../../shared/lib/model-util.js';
-import { generateHouseEd25519KeyPair, randomId } from './crypto.js';
+import { generateHouseEd25519KeyPair, randomId, sha256HexNode } from './crypto.js';
 import {
   mapConstitutionRow,
   mapEpisodeRow,
@@ -50,6 +53,15 @@ export function mapInhabitantRow(row, activeKeyPrefixes = [], roomGrantsMap = {}
     lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
     hasOAuthConnection: Boolean(row.has_oauth_connection),
     departedAt: row.departed_at ? new Date(row.departed_at).toISOString() : null,
+    hostKind: row.host_kind || (row.kind === 'ai' ? 'custom' : null),
+    wakePreset: row.wake_preset || 'custom',
+    participationMode: row.participation_mode === 'readonly' ? 'readonly' : 'contribute',
+    participationLocked: Boolean(row.participation_locked),
+    bio: row.bio || '',
+    hobbies: Array.isArray(row.hobbies) ? row.hobbies : [],
+    avatarUrl: row.avatar_url || null,
+    gravatarHash: row.gravatar_hash || null,
+    useGravatar: row.use_gravatar !== false,
     createdAt: new Date(row.created_at).toISOString(),
   };
 }
@@ -165,6 +177,7 @@ export async function hydrateHouseForViewer(
     callRes,
     cursorRes,
     oauthRes,
+    userRes,
   ] = await Promise.all([
     db.query(`SELECT * FROM inhabitants WHERE house_id = $1 ORDER BY created_at ASC`, [houseRow.id]),
     db.query(
@@ -202,9 +215,19 @@ export async function hydrateHouseForViewer(
        WHERE i.house_id = $1 AND t.revoked_at IS NULL`,
       [houseRow.id]
     ),
+    db.query(
+      `SELECT i.id AS inhabitant_id, u.email
+       FROM inhabitants i
+       JOIN mh_users u ON u.id = i.user_id
+       WHERE i.house_id = $1 AND i.kind = 'human' AND i.use_gravatar IS NOT FALSE`,
+      [houseRow.id]
+    ),
   ]);
 
   const oauthIds = new Set(oauthRes.rows.map((row) => row.inhabitant_id));
+  const gravatarById = new Map(
+    userRes.rows.map((row) => [row.inhabitant_id, sha256HexNode(String(row.email || '').trim().toLowerCase())])
+  );
 
   const prefixesByInh = {};
   for (const k of keyRes.rows) {
@@ -222,13 +245,25 @@ export async function hydrateHouseForViewer(
     roomGrantsByInh[g.inhabitant_id][g.room_id].push(g.scope);
   }
 
-  const inhabitants = inhRes.rows.map((r) =>
-    mapInhabitantRow(
-      { ...r, has_oauth_connection: oauthIds.has(r.id) },
-      prefixesByInh[r.id] || [],
-      roomGrantsByInh[r.id] || {}
-    )
-  );
+  const inhabitants = [];
+  for (const r of inhRes.rows) {
+    let avatarUrl = null;
+    if (r.avatar_r2_key && originUrl) {
+      avatarUrl = await mintSignedReadUrl(originUrl, { r2_key: r.avatar_r2_key, status: 'committed' });
+    }
+    inhabitants.push(
+      mapInhabitantRow(
+        {
+          ...r,
+          has_oauth_connection: oauthIds.has(r.id),
+          avatar_url: avatarUrl,
+          gravatar_hash: r.kind === 'human' && r.use_gravatar !== false ? gravatarById.get(r.id) || null : null,
+        },
+        prefixesByInh[r.id] || [],
+        roomGrantsByInh[r.id] || {}
+      )
+    );
+  }
 
   let resolvedViewerId = viewerInhabitantId;
   if (!resolvedViewerId && viewerUserId) {
@@ -411,31 +446,44 @@ export async function createAiInhabitantInDb(
   {
     houseId,
     stewardInhabitant,
+    house,
     name,
     handle,
-    provider = 'claude',
+    provider,
+    hostKind,
+    participationMode = 'contribute',
     arrivalNumber = 1,
     doorType = 'human_prompt',
     signatureNotes = '',
     modelSlug = null,
   }
 ) {
-  if (!stewardInhabitant.can(INHABITANT_GRANTS.HOUSE_MANAGE)) {
-    throw new Error('Only a House steward can register AI inhabitants.');
+  if (!canInviteAi(stewardInhabitant, house || { inhabitants: [] })) {
+    const err = new Error(
+      stewardInhabitant.can(INHABITANT_GRANTS.AI_INVITE)
+        ? 'Members may welcome one active AI inhabitant. A steward can welcome more.'
+        : 'You do not have permission to welcome an AI inhabitant.'
+    );
+    err.status = 403;
+    throw err;
   }
   const cleanName = String(name || '').trim();
   if (!cleanName) throw new Error('AI inhabitant name is required.');
+  const resolvedHost = isHostKind(hostKind) ? hostKind : 'custom';
+  const resolvedProvider = provider || providerForHost(resolvedHost);
+  const mode = participationMode === 'readonly' ? 'readonly' : 'contribute';
   const cleanHandle = slugify(handle || cleanName) || randomId('ai');
   const id = randomId('inh');
-  const disclosure = defaultProviderDisclosure(provider);
-  const grants = [...AI_DEFAULT_GRANTS];
+  const disclosure = defaultProviderDisclosure(resolvedProvider);
+  const grants = grantsForParticipation(mode);
 
   const { rows } = await db.query(
     `INSERT INTO inhabitants (
       id, house_id, kind, steward_inhabitant_id, name, handle,
       role_label, signature_notes, arrival_number, provider,
-      provider_disclosure, model_slug, door_type, grants, presence
-    ) VALUES ($1,$2,'ai',$3,$4,$5,'AI Inhabitant',$6,$7,$8,$9,$10,$11,$12::jsonb,'invocable')
+      provider_disclosure, model_slug, door_type, grants, presence,
+      host_kind, wake_preset, participation_mode
+    ) VALUES ($1,$2,'ai',$3,$4,$5,'AI Inhabitant',$6,$7,$8,$9,$10,$11,$12::jsonb,'invocable',$13,$14,$15)
     RETURNING *`,
     [
       id,
@@ -445,11 +493,14 @@ export async function createAiInhabitantInDb(
       cleanHandle,
       String(signatureNotes || ''),
       Math.max(1, Number(arrivalNumber || 1)),
-      String(provider || 'custom'),
+      String(resolvedProvider || 'custom'),
       disclosure,
       modelSlug || null,
       String(doorType || 'human_prompt'),
       JSON.stringify(grants),
+      resolvedHost,
+      defaultWakePresetForHost(resolvedHost),
+      mode,
     ]
   );
 
@@ -473,8 +524,8 @@ export async function updateInhabitantInDb(db, { houseId, inhabitantId, body = {
   if (!row) throw fail(404, 'Inhabitant not found.');
   if (row.departed_at) throw fail(409, 'This inhabitant has departed.');
 
-  const identityFields = ['name', 'handle', 'provider', 'doorType', 'modelSlug'];
-  if (identityFields.some((key) => body[key] !== undefined) && row.kind !== 'ai') {
+  const aiOnlyFields = ['handle', 'provider', 'doorType', 'modelSlug', 'hostKind'];
+  if (aiOnlyFields.some((key) => body[key] !== undefined) && row.kind !== 'ai') {
     throw fail(400, 'Only an AI inhabitant has a provider and a door.');
   }
 
@@ -520,12 +571,35 @@ export async function updateInhabitantInDb(db, { houseId, inhabitantId, body = {
     const slug = String(body.modelSlug || '').trim();
     modelSlug = slug || null;
   }
+  let hostKind = row.host_kind || 'custom';
+  let wakePreset = row.wake_preset || 'custom';
+  if (body.hostKind !== undefined && row.kind === 'ai') {
+    if (!isHostKind(body.hostKind)) throw fail(400, 'Unknown host.');
+    hostKind = body.hostKind;
+    if (body.provider === undefined) {
+      provider = providerForHost(hostKind);
+      disclosure = defaultProviderDisclosure(provider);
+    }
+    if (body.wakePreset === undefined && !row.wake_url) {
+      wakePreset = defaultWakePresetForHost(hostKind);
+    }
+  }
+  const bio = body.bio !== undefined ? String(body.bio).slice(0, 2000) : row.bio || '';
+  const hobbies =
+    body.hobbies !== undefined
+      ? (Array.isArray(body.hobbies) ? body.hobbies : String(body.hobbies).split(','))
+          .map((item) => String(item).trim())
+          .filter(Boolean)
+          .slice(0, 12)
+      : row.hobbies || [];
+  const useGravatar = body.useGravatar !== undefined ? Boolean(body.useGravatar) : row.use_gravatar !== false;
 
   await db.query(
     `UPDATE inhabitants
      SET name = $1, handle = $2, arrival_number = $3, handoff_note = $4, signature_notes = $5,
-         provider = $6, provider_disclosure = $7, model_slug = $8, door_type = $9
-     WHERE id = $10`,
+         provider = $6, provider_disclosure = $7, model_slug = $8, door_type = $9,
+         host_kind = $10, wake_preset = $11, bio = $12, hobbies = $13::jsonb, use_gravatar = $14
+     WHERE id = $15`,
     [
       name,
       handle,
@@ -536,9 +610,46 @@ export async function updateInhabitantInDb(db, { houseId, inhabitantId, body = {
       disclosure,
       modelSlug,
       doorType,
+      hostKind,
+      wakePreset,
+      bio,
+      JSON.stringify(hobbies),
+      useGravatar,
       inhabitantId,
     ]
   );
+}
+
+export async function setAiParticipationModeInDb(db, { houseId, inhabitantId, mode, locked }) {
+  const next = mode === 'readonly' ? 'readonly' : 'contribute';
+  const grants = grantsForParticipation(next);
+  await db.transaction(async (tx) => {
+    const { rows } = await tx.query(
+      `SELECT * FROM inhabitants WHERE id = $1 AND house_id = $2 AND kind = 'ai' LIMIT 1`,
+      [inhabitantId, houseId]
+    );
+    if (!rows[0]) throw fail(404, 'AI inhabitant not found.');
+    if (rows[0].departed_at) throw fail(409, 'This inhabitant has departed.');
+    await tx.query(
+      `UPDATE inhabitants
+       SET participation_mode = $1,
+           participation_locked = COALESCE($2, participation_locked),
+           grants = $3::jsonb
+       WHERE id = $4`,
+      [next, locked === undefined ? null : Boolean(locked), JSON.stringify(grants), inhabitantId]
+    );
+    await tx.query(`DELETE FROM inhabitant_grants WHERE inhabitant_id = $1 AND room_id IS NULL`, [
+      inhabitantId,
+    ]);
+    for (const scope of grants) {
+      await tx.query(
+        `INSERT INTO inhabitant_grants (id, house_id, inhabitant_id, room_id, scope)
+         VALUES ($1,$2,$3,NULL,$4)`,
+        [randomId('gr'), houseId, inhabitantId, scope]
+      );
+    }
+  });
+  return { participationMode: next, grants };
 }
 
 export async function departAiInhabitantInDb(db, { houseId, inhabitantId, handoffNote }) {

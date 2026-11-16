@@ -176,6 +176,11 @@
   }
 }
 
+.icon-btn--sm {
+  width: 2rem;
+  height: 2rem;
+}
+
 .icon-btn--outline {
   border-color: var(--border);
   background: var(--surface);
@@ -518,6 +523,8 @@ button.card,
   border: 1.5px solid var(--sig);
   border-radius: 50%;
   user-select: none;
+  position: relative;
+  overflow: hidden;
 }
 
 .monogram--ai {
@@ -529,6 +536,175 @@ button.card,
   width: 1.75rem;
   height: 1.75rem;
   font-size: 0.6875rem;
+}
+
+.monogram--lg {
+  width: 4rem;
+  height: 4rem;
+  font-size: 1.25rem;
+}
+
+// A picture inside a mark. The mark keeps its own shape (round or doorway); the picture fills it.
+.monogram-img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--duration) var(--ease);
+
+  &.is-ready {
+    opacity: 1;
+  }
+}
+
+// A quiet word for state ("Waiting for connection…", "Connected"). Not a counter, not an alert.
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.2rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-pill);
+}
+
+.status-pill--ok {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+// ===========================================================================
+// Modal: a calm sheet laid over the house, not a SaaS dialog.
+// Phone: near full screen. Desktop: centred, about 40rem wide.
+// ===========================================================================
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5) var(--space-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--overlay);
+
+  @include phone {
+    padding: var(--safe-top) 0 0;
+    place-items: end stretch;
+  }
+}
+
+.modal-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 40rem);
+  max-height: calc(100dvh - 2 * var(--space-5));
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 0 var(--border);
+  overflow: hidden;
+
+  @include phone {
+    width: 100%;
+    max-height: calc(100dvh - var(--safe-top) - var(--space-4));
+    border-inline: 0;
+    border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-bottom: 1px solid var(--border-light);
+
+  h2 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+
+  @include phone {
+    padding: var(--space-3) var(--space-4);
+  }
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4) var(--space-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  @include phone {
+    padding: var(--space-4);
+  }
+}
+
+.modal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) calc(var(--space-3) + var(--safe-bottom));
+  border-top: 1px solid var(--border-light);
+
+  @include phone {
+    padding-inline: var(--space-4);
+  }
+}
+
+// ===========================================================================
+// Context menu: a short list that opens beside the thing it belongs to
+// ===========================================================================
+
+.context-menu {
+  position: fixed;
+  z-index: 82;
+  display: flex;
+  flex-direction: column;
+  min-width: 13rem;
+  max-width: calc(100vw - 1rem);
+  padding: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 0 var(--border);
+
+  > button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 2.5rem;
+    padding: 0.4rem var(--space-3);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    text-align: left;
+    color: var(--text);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--primary);
+      background: var(--primary-soft);
+      outline: none;
+    }
+  }
 }
 
 // ===========================================================================

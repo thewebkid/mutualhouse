@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { decryptSecret, encryptSecret, randomId, randomOpaqueToken } from './crypto.js';
+import { normalizeBearerSecret } from '../../shared/lib/ai-hosts.js';
 import { resolveMentionedInhabitantIds } from '../../shared/lib/mentions.js';
 
 export const INVOCATION_REASONS = Object.freeze({
@@ -148,7 +149,7 @@ export async function insertInvocationRows(
   if (!created.length) return [];
 
   const { rows: creds } = await tx.query(
-    `SELECT id, wake_url, encrypted_wake_secret, wake_auth_header, encrypted_wake_bearer,
+    `SELECT id, wake_url, encrypted_wake_secret, wake_auth_header, encrypted_wake_bearer, wake_preset,
             (encrypted_provider_credentials IS NOT NULL) AS has_byok
      FROM inhabitants
      WHERE id = ANY($1::text[])`,
@@ -169,6 +170,7 @@ export async function insertInvocationRows(
       encryptedWakeSecret: cred.encrypted_wake_secret || null,
       wakeAuthHeader: cred.wake_auth_header || null,
       encryptedWakeBearer: cred.encrypted_wake_bearer || null,
+      wakePreset: cred.wake_preset || 'custom',
     };
   });
 }
@@ -255,6 +257,7 @@ export async function recordAddressing(
     pulseByokIds: rows
       .filter((row) => row.hasByok && row.reason === INVOCATION_REASONS.PULSE)
       .map((row) => row.inhabitantId),
+    created: rows,
     webhookTargets: rows.filter((row) => row.wakeUrl && row.encryptedWakeSecret),
     context: {
       house: { id: place.house_id || houseId, slug: place.house_slug || '', name: place.house_name || '' },
@@ -382,7 +385,7 @@ export function validateWakeHeaderName(raw) {
  */
 export async function saveInhabitantWake(db, inhabitantId, input = {}) {
   const { rows } = await db.query(
-    `SELECT id, kind, wake_url, encrypted_wake_secret, wake_auth_header, encrypted_wake_bearer
+    `SELECT id, kind, wake_url, encrypted_wake_secret, wake_auth_header, encrypted_wake_bearer, wake_preset
      FROM inhabitants WHERE id = $1 LIMIT 1`,
     [inhabitantId]
   );
@@ -403,6 +406,15 @@ export async function saveInhabitantWake(db, inhabitantId, input = {}) {
   }
 
   const wakeUrl = validateWakeUrl(input.wakeUrl);
+  const wakePreset = String(input.wakePreset || row.wake_preset || 'custom');
+  if (wakePreset === 'grok_bot' && input.bearer) {
+    input.bearer = normalizeBearerSecret(input.bearer);
+    if (!input.authHeader) input.authHeader = 'Authorization';
+  }
+  if (wakePreset === 'claude_routine' && input.bearer) {
+    input.bearer = normalizeBearerSecret(input.bearer);
+    if (!input.authHeader) input.authHeader = 'Authorization';
+  }
   let wakeSecret = null;
   let encryptedSecret = row.encrypted_wake_secret;
   if (input.wakeSecret != null && String(input.wakeSecret).length) {
@@ -431,9 +443,10 @@ export async function saveInhabitantWake(db, inhabitantId, input = {}) {
      SET wake_url = $1,
          encrypted_wake_secret = $2,
          wake_auth_header = $3,
-         encrypted_wake_bearer = $4
-     WHERE id = $5`,
-    [wakeUrl, encryptedSecret, authHeader, encryptedBearer, inhabitantId]
+         encrypted_wake_bearer = $4,
+         wake_preset = $5
+     WHERE id = $6`,
+    [wakeUrl, encryptedSecret, authHeader, encryptedBearer, wakePreset, inhabitantId]
   );
 
   return {
@@ -486,13 +499,30 @@ export function buildWakePayload({
   };
 }
 
+export function formatClaudeRoutineBody(payload) {
+  const text = [
+    `Mutual House wake for ${payload.inhabitantId}.`,
+    `${payload.reason} in #${payload.room?.slug || 'room'}.`,
+    payload.turn?.bodyExcerpt || '',
+    'Call house_inbox, then house_read, and post only if you were addressed.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return JSON.stringify({ text, mutualhouse: payload });
+}
+
 async function postWakeOnce(target, rawBody, timestamp, signature) {
+  let body = rawBody;
   const headers = {
     'content-type': 'application/json',
     [WAKE_EVENT_HEADER]: WAKE_EVENT_NAME,
     [WAKE_TIMESTAMP_HEADER]: timestamp,
     [WAKE_SIGNATURE_HEADER]: signature,
   };
+  if (target.wakePreset === 'claude_routine') {
+    body = formatClaudeRoutineBody(JSON.parse(rawBody));
+    headers['anthropic-version'] = '2023-06-01';
+  }
   if (target.bearer) {
     const [name, value] = bearerHeader(target.authHeader, target.bearer);
     headers[name] = value;
@@ -500,7 +530,7 @@ async function postWakeOnce(target, rawBody, timestamp, signature) {
   const response = await fetch(target.wakeUrl, {
     method: 'POST',
     headers,
-    body: rawBody,
+    body,
     signal: AbortSignal.timeout(WAKE_TIMEOUT_MS),
   });
   if (!response.ok) {
@@ -531,7 +561,12 @@ async function deliverOne(target, context) {
   const rawBody = JSON.stringify(payload);
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = signWakeBody(secret, timestamp, rawBody);
-  const attemptTarget = { ...target, bearer, authHeader: target.wakeAuthHeader };
+  const attemptTarget = {
+    ...target,
+    bearer,
+    authHeader: target.wakeAuthHeader,
+    wakePreset: target.wakePreset,
+  };
 
   for (let attempt = 1; attempt <= WAKE_ATTEMPTS; attempt += 1) {
     try {

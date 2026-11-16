@@ -28,8 +28,8 @@ Shared with the siblings: the principles (structural class names, calm and zero 
 | `_tokens.scss` | Palette, fonts, spacing, radii, theme blocks (`light-theme`, `dark-theme`) and the `hearth` mixin |
 | `_typography.scss` | Body, headings, `.prose`, `.serif-line`, `.serif-quote`, `.eyebrow`, `.label`, `.meta`, `.subhead` |
 | `_layout.scss` | Porch (`.porch-*`, `.porch-hero`, `.arch-row`, `.band`), `.container`, `.doc-layout`, `.grid`, `.stack`, the studio shell (`.shell`, `.rail`, `.stage`, `.leaf`, `.drawer`) |
-| `_components.scss` | `.btn`, `.card`, `.cta-card`, `.panel`, `.badge`, `.monogram`, `.presence-dot`, `.seal-banner`, `.tabs`, `.word-list`, `.list-columns`, `.list-numbered`, `.data-table`, `.toast` |
-| `_forms.scss` | `.field`, `.field-control`, `.toggle-row`, `.choice`, `.cluster` |
+| `_components.scss` | `.btn`, `.card`, `.cta-card`, `.panel`, `.badge`, `.monogram` (`.monogram-img` for a picture inside it), `.status-pill`, `.presence-dot`, `.modal-backdrop` / `.modal-dialog` / `.modal-head` / `.modal-body` / `.modal-foot` (a calm sheet: near full screen on phone, about 40rem centred on desktop), `.context-menu`, `.seal-banner`, `.tabs`, `.word-list`, `.list-columns`, `.list-numbered`, `.data-table`, `.toast` |
+| `_forms.scss` | `.field`, `.field-control`, `.toggle-row`, `.choice`, `.chip-input`, `.cluster` |
 | `_help.scss` | `HelpTip` popover (`.help-tip`, `.help-btn`, `.help-pop`), `.label-row`, `.steps-grid` how-it-works plaques |
 | `_room.scss` | Rail items, `.room-head` (masthead), `.room-presence`, `.turn-list`, `.turn-row`, `.turn-meta`, `.turn-facts`, `.turn-veil`, `.composer`, `.kind-select`, `.voice-bar`, `.call-stage`, `.receipt-list` |
 
@@ -93,7 +93,7 @@ Many inhabitants have never used an AI agent. The house explains itself **in pla
 
 - **`HelpTip` (`client/src/components/HelpTip.vue`)** — a small circled `?` that opens a plain-language note beside itself. It is teleported to `<body>` (clipped containers can't cut it off), becomes a bottom sheet with a scrim on phones, and closes on Escape, scroll, or tap-outside. Place one wherever a term could be unfamiliar — doors, arrivals, seals, routing, coordinates, passkeys, verification keys. Put it in a `.label-row` beside its subject.
 - **Plain words first, protocol names second.** Doors are introduced as what they *do* — "Connector link", "Copy & paste", "Always-on runner", "House-held key (BYOK)" — with `Door 1–4` kept as secondary reference. "Tempo pulse" is a **nudge**; "provenance coordinates" explains itself in its HelpTip. Tabs are "House identity / AI inhabitants / People & invites / Export & security".
-- **Guidance over emptiness.** Empty states name the next move (the room composer, the "Welcome your first AI" rail CTA, the hub's three steps). The Housekeeping AI tab opens with a `.steps-grid` — three numbered plaques saying exactly how an AI joins.
+- **Guidance over emptiness.** Empty states name the next move (the room composer, the "Add AI" rail button that opens the welcome sheet, the hub's three steps). The Housekeeping AI tab opens with a `.steps-grid` — three numbered plaques saying exactly how an AI joins.
 - **Choices as cards.** When a user must pick between ways of doing something (the four doors), use `.choice-grid` / `.choice` radio cards with a "Recommended" or "Simplest" badge, never a bare `<select>` of jargon.
 - **Composer keys:** Enter sends on devices with a hardware keyboard (`pointer: fine`); Shift+Enter makes a new line; touch keyboards keep Enter as a newline. The hint "Enter to send · Shift+Enter for a new line" sits beside Send on non-phone screens.
 

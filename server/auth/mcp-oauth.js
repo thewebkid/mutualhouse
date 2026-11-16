@@ -172,7 +172,7 @@ export function buildAuthServerMetadata(originUrl) {
     jwks_uri: `${originUrl}/.well-known/jwks.json`,
     response_types_supported: ['code'],
     grant_types_supported: ['authorization_code', 'refresh_token'],
-    token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+    token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
     code_challenge_methods_supported: ['S256'],
     scopes_supported: [...ALLOWED_MCP_SCOPES],
     client_id_metadata_document_supported: true,
@@ -279,10 +279,12 @@ export async function registerDynamicOAuthClient(db, body = {}) {
   if (!redirectUris.length) {
     throw new Error('redirect_uris is required for Dynamic Client Registration.');
   }
-  const authMethod =
-    body.token_endpoint_auth_method === 'client_secret_post' ? 'client_secret_post' : 'none';
+  const requestedMethod = String(body.token_endpoint_auth_method || 'none');
+  const authMethod = ['client_secret_post', 'client_secret_basic'].includes(requestedMethod)
+    ? requestedMethod
+    : 'none';
   const clientId = randomOpaqueToken('mhc', 16);
-  const clientSecret = authMethod === 'client_secret_post' ? randomOpaqueToken('mhs', 24) : null;
+  const clientSecret = authMethod === 'none' ? null : randomOpaqueToken('mhs', 24);
   const scopes = scopesForDynamicClientRegistration(body.scope);
 
   await db.query(
@@ -308,6 +310,36 @@ export async function registerDynamicOAuthClient(db, body = {}) {
     token_endpoint_auth_method: authMethod,
     scope: scopes.join(' '),
   };
+}
+
+export function classifyResourceParam(rawResource = '', originUrl = '') {
+  const text = String(rawResource || '').trim();
+  const origin = String(originUrl || '').replace(/\/+$/, '');
+  if (!text || text === origin || text === `${origin}/`) return { kind: 'empty' };
+  const inhabitantId = extractInhabitantIdFromResource(text);
+  if (!inhabitantId) return { kind: 'invalid' };
+  try {
+    const resource = new URL(text);
+    const originHost = new URL(origin || text).host;
+    if (origin && resource.host !== originHost) return { kind: 'invalid' };
+  } catch {
+    return { kind: 'invalid' };
+  }
+  return { kind: 'inhabitant', inhabitantId };
+}
+
+async function assertClientSecret(db, clientId, presentedSecret, required) {
+  if (!required) return;
+  const { rows } = await db.query(
+    `SELECT client_secret_hash, token_endpoint_auth_method FROM oauth_clients WHERE client_id = $1`,
+    [clientId]
+  );
+  const row = rows[0];
+  const method = row?.token_endpoint_auth_method || 'none';
+  if (method === 'none') return;
+  if (!presentedSecret || !row?.client_secret_hash || sha256HexNode(presentedSecret) !== row.client_secret_hash) {
+    throw new OAuthError(OAuthErrorCode.InvalidClient, 'Client authentication failed.');
+  }
 }
 
 export function extractInhabitantIdFromResource(resourceUrl = '') {
@@ -363,7 +395,7 @@ export async function mintAuthorizationCode(
   return rawCode;
 }
 
-export async function exchangeOAuthToken(db, { originUrl, grantType, params }) {
+export async function exchangeOAuthToken(db, { originUrl, grantType, params, clientSecret = '' }) {
   if (grantType === 'authorization_code') {
     const codeHash = sha256HexNode(String(params.code || ''));
     const { rows } = await db.query(
@@ -383,6 +415,7 @@ export async function exchangeOAuthToken(db, { originUrl, grantType, params }) {
     if (params.client_id && params.client_id !== codeRow.client_id) {
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'client_id mismatch.');
     }
+    await assertClientSecret(db, codeRow.client_id, clientSecret || params.client_secret, true);
 
     // Verify PKCE S256 code_verifier
     const verifier = String(params.code_verifier || '');
@@ -391,7 +424,11 @@ export async function exchangeOAuthToken(db, { originUrl, grantType, params }) {
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'PKCE code_verifier check failed.');
     }
 
-    if (params.resource && params.resource !== codeRow.resource) {
+    const resourceClass = classifyResourceParam(params.resource || '', originUrl);
+    if (resourceClass.kind === 'invalid') {
+      throw new OAuthError(OAuthErrorCode.InvalidTarget, 'Requested resource does not match grant.');
+    }
+    if (resourceClass.kind === 'inhabitant' && params.resource !== codeRow.resource) {
       throw new OAuthError(OAuthErrorCode.InvalidTarget, 'Requested resource does not match grant.');
     }
 
@@ -440,9 +477,11 @@ export async function exchangeOAuthToken(db, { originUrl, grantType, params }) {
     if (tokRow.refresh_expires_at && new Date(tokRow.refresh_expires_at) <= new Date()) {
       throw new OAuthError(OAuthErrorCode.InvalidGrant, 'Refresh token expired.');
     }
-    if (params.resource && params.resource !== tokRow.resource) {
+    const refreshResource = classifyResourceParam(params.resource || '', originUrl);
+    if (refreshResource.kind === 'invalid' || (refreshResource.kind === 'inhabitant' && params.resource !== tokRow.resource)) {
       throw new OAuthError(OAuthErrorCode.InvalidTarget, 'Cannot change resource on refresh.');
     }
+    await assertClientSecret(db, tokRow.client_id, clientSecret || params.client_secret, true);
 
     await db.query(`UPDATE oauth_tokens SET revoked_at = NOW() WHERE id = $1`, [tokRow.id]);
 
