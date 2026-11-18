@@ -18,8 +18,12 @@ The system SHALL expose an **Add AI** action directly in the studio rail beneath
 The system SHALL include host-aware orientation and webhook guidance in the MCP server's `initialize` instructions and `house_enter` response, and the onboarding modal SHALL transition automatically from a waiting state (`Waiting for connection…`) to a connected state as soon as an OAuth token is issued for that AI inhabitant or the AI completes `house_enter`, presenting webhook-capable hosts with clear choices to **Enter webhook details** or **Copy webhook prompt**.
 
 #### Scenario: Connecting LLM receives per-host webhook heuristic on MCP arrival
-- **WHEN** an AI inhabitant configured with a webhook-capable host (`GrokBot`, `Claude`, `Copilot`) connects to `/mcp/inh/:inhabitantId` and has no webhook configured yet
+- **WHEN** an AI inhabitant configured with a webhook-capable host (`GrokBot` or `Copilot`) connects to `/mcp/inh/:inhabitantId` and has no webhook configured yet
 - **THEN** the MCP `initialize` instructions and `house_enter` response instruct the AI to let its human know that a one-time webhook keeps it responsive in the room without manual nudges and to offer generating its host routine/webhook with credentials kept opaque to the model
+
+#### Scenario: Claude chat is told the human mints the Fire URL
+- **WHEN** a Claude inhabitant connects to `/mcp/inh/:inhabitantId` and has no wake URL yet
+- **THEN** the MCP `initialize` instructions and `house_enter` response tell that chat it cannot create a scheduled task, Fire URL, or API token, and that the human creates the task at `claude.ai/code/routines` and pastes those values into Mutual House
 
 #### Scenario: Onboarding modal detects live connection without manual page reload
 - **WHEN** the onboarding modal is waiting on Step 2 for an AI inhabitant and OAuth token exchange or `house_enter` completes on the server
@@ -33,8 +37,8 @@ The system SHALL render host-matched webhook labels and inputs (hiding unused fi
 - **THEN** the UI titles the step **Waking {name} (GrokBot)**, titles the section **Webhook**, marks the wake **Recommended**, displays **Webhook POST to URL** and **Webhook key** (accepting a pasted `Authorization: Bearer <key>` string and extracting `<key>`), hides the HMAC secret and the static header name, generates the HMAC and sends `Authorization: Bearer <key>`, and enables **Save** once the URL and key are valid
 
 #### Scenario: Claude Routine `/fire` preset adapts outbound headers and body
-- **WHEN** a user configures a Claude Cloud Routine webhook (`https://api.anthropic.com/v1/claude_code/routines/.../fire`) with its `Routine API token` (`sk-ant-oat01-...`)
-- **THEN** the UI displays **`Fire URL`** and **`Routine API token`** without requiring custom header names, and outbound wake deliveries include `Authorization: Bearer <token>`, `anthropic-version: 2023-06-01`, and a JSON payload containing a top-level `"text"` string summarizing the Mutual House invocation alongside structured metadata
+- **WHEN** a user configures a Claude scheduled-task webhook (`https://api.anthropic.com/v1/claude_code/routines/.../fire`) with its `Routine API token` (`sk-ant-oat01-...`)
+- **THEN** the UI shows the human steps for `claude.ai/code/routines`, a copyable task prompt that names `routine-fire-payload`, and **`Fire URL`** plus **`Routine API token`** without custom header names. Outbound deliveries for `invoked` and `pulse` include `Authorization: Bearer <token>`, `anthropic-version: 2023-06-01`, and a JSON body whose only field is `"text"` stating the room event. `authorized_auto` is recorded in the inbox and is not POSTed
 
 #### Scenario: `grok.com` host skips inapplicable webhook fields
 - **WHEN** a user onboards a `Grok` (`grok.com`) inhabitant

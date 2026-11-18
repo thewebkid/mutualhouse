@@ -3,8 +3,8 @@ import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDbForTests } from '../server/db/index.js';
 import { createServerApp } from '../server/app.js';
-import { getAiHost, normalizeBearerSecret, wakeHostFor } from '../shared/lib/ai-hosts.js';
-import { formatClaudeRoutineBody } from '../server/services/invocations.js';
+import { buildWebhookPrompt, getAiHost, normalizeBearerSecret, wakeHostFor } from '../shared/lib/ai-hosts.js';
+import { formatClaudeRoutineBody, wakeTargetIsDeliverable } from '../server/services/invocations.js';
 import { sha256HexNode } from '../server/services/crypto.js';
 
 const ORIGIN = 'http://localhost:5888';
@@ -225,9 +225,34 @@ describe('Welcoming AI onboarding', () => {
 
   it('normalizes a Grok Bot bearer and formats a Claude routine wake', () => {
     expect(normalizeBearerSecret('Authorization: Bearer abc123')).toBe('abc123');
-    const body = JSON.parse(formatClaudeRoutineBody({ inhabitantId: 'inh_1', reason: 'invoked', room: { slug: 'common-room' }, turn: { bodyExcerpt: 'hello' } }));
+    const body = JSON.parse(
+      formatClaudeRoutineBody({
+        inhabitantId: 'inh_1',
+        invocationId: 'inv_1',
+        reason: 'invoked',
+        room: { slug: 'common-room' },
+        turn: { seq: 4, bodyExcerpt: 'hello' },
+        inviter: { name: 'Ron' },
+      })
+    );
+    expect(body.mutualhouse).toBeUndefined();
+    expect(Object.keys(body)).toEqual(['text']);
     expect(body.text).toMatch(/inh_1/);
-    expect(body.mutualhouse.reason).toBe('invoked');
+    expect(body.text).toMatch(/invoked/);
+    expect(body.text).toMatch(/#common-room/);
+    expect(body.text).toMatch(/turn #4/);
+    expect(body.text).toMatch(/Ron wrote "hello"/);
+    expect(body.text).not.toMatch(/house_inbox/);
+    const prompt = buildWebhookPrompt({ name: 'clod', hostKind: 'claude' });
+    expect(prompt).toMatch(/routine-fire-payload/);
+    expect(prompt).toMatch(/clod/);
+    expect(prompt).not.toMatch(/Fire URL/);
+    expect(getAiHost('claude').wakeSteps.join(' ')).toMatch(/claude\.ai\/code\/routines/);
+    const wake = { wakeUrl: 'https://api.anthropic.com/fire', encryptedWakeSecret: 'secret' };
+    expect(wakeTargetIsDeliverable({ ...wake, wakePreset: 'claude_routine', reason: 'authorized_auto' })).toBe(false);
+    expect(wakeTargetIsDeliverable({ ...wake, wakePreset: 'claude_routine', reason: 'invoked' })).toBe(true);
+    expect(wakeTargetIsDeliverable({ ...wake, wakePreset: 'claude_routine', reason: 'pulse' })).toBe(true);
+    expect(wakeTargetIsDeliverable({ ...wake, wakePreset: 'grok_bot', reason: 'authorized_auto' })).toBe(true);
     const fields = getAiHost('grok_bot').webhookFields;
     expect(fields.map((field) => field.id)).toEqual(['wakeUrl', 'bearer']);
     expect(fields.map((field) => field.label)).toEqual(['Webhook POST to URL', 'Webhook key']);
