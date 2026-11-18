@@ -509,12 +509,13 @@ export function formatClaudeRoutineBody(payload) {
   const seq = payload.turn?.seq != null ? ` turn #${payload.turn.seq}` : '';
   const who = payload.inviter?.name || 'someone';
   const excerpt = payload.turn?.bodyExcerpt ? ` "${payload.turn.bodyExcerpt}"` : '';
+  const action = payload.turn ? `${who} wrote${excerpt}.` : `pulse from ${who}.`;
   const text = [
     'Mutual House event.',
     `inhabitant ${payload.inhabitantId || ''}.`,
     `reason ${payload.reason || 'invoked'}.`,
     `room ${room}${seq}.`,
-    `${who} wrote${excerpt}.`,
+    action,
     payload.invocationId ? `invocation ${payload.invocationId}.` : '',
   ]
     .filter(Boolean)

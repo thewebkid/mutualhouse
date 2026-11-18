@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDbForTests } from '../server/db/index.js';
 import { createServerApp } from '../server/app.js';
 import { buildWebhookPrompt, getAiHost, normalizeBearerSecret, wakeHostFor } from '../shared/lib/ai-hosts.js';
-import { formatClaudeRoutineBody, wakeTargetIsDeliverable } from '../server/services/invocations.js';
-import { sha256HexNode } from '../server/services/crypto.js';
+import { dispatchInvocationWebhooks, flushInvocationDeliveries, formatClaudeRoutineBody, wakeTargetIsDeliverable } from '../server/services/invocations.js';
+import { encryptSecret, sha256HexNode } from '../server/services/crypto.js';
 
 const ORIGIN = 'http://localhost:5888';
 
@@ -243,6 +243,18 @@ describe('Welcoming AI onboarding', () => {
     expect(body.text).toMatch(/turn #4/);
     expect(body.text).toMatch(/Ron wrote "hello"/);
     expect(body.text).not.toMatch(/house_inbox/);
+    const pulse = JSON.parse(
+      formatClaudeRoutineBody({
+        inhabitantId: 'inh_1',
+        invocationId: 'inv_pulse',
+        reason: 'pulse',
+        room: { slug: 'common-room' },
+        turn: null,
+        inviter: { name: 'Ron' },
+      })
+    );
+    expect(pulse.text).not.toMatch(/wrote/);
+    expect(pulse.text).toMatch(/pulse from Ron/);
     const prompt = buildWebhookPrompt({ name: 'clod', hostKind: 'claude' });
     expect(prompt).toMatch(/routine-fire-payload/);
     expect(prompt).toMatch(/clod/);
@@ -262,6 +274,55 @@ describe('Welcoming AI onboarding', () => {
     expect(wakeHostFor({ hostKind: 'grok_bot' }).id).toBe('grok_bot');
     expect(wakeHostFor({ hostKind: 'custom', wakeUrl: 'https://api2.cursor.sh/automations/webhook/abc' }).id).toBe('grok_bot');
     expect(wakeHostFor({ hostKind: 'claude' }).id).toBe('claude');
+  });
+
+  it('fires Claude for mentions and pulses, and skips authorized auto', async () => {
+    const secret = encryptSecret('wake-secret-value');
+    const calls = [];
+    const fetchMock = vi.fn(async (url, init) => {
+      calls.push({ url: String(url), init });
+      return new Response('ok', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const base = {
+        encryptedWakeSecret: secret,
+        encryptedWakeBearer: null,
+        wakeAuthHeader: null,
+        createdAt: '2026-11-18T00:00:00.000Z',
+      };
+      const place = {
+        house: { id: 'house_1', slug: 'the-now', name: 'The Now' },
+        room: { id: 'room_1', slug: 'common-room', name: 'Common Room' },
+        inviter: { id: 'inh_ron', name: 'Ron', handle: 'ron', kind: 'human' },
+        originUrl: 'https://mutualhouse.example',
+      };
+      await dispatchInvocationWebhooks(
+        [
+          { ...base, id: 'inv_auto', inhabitantId: 'inh_auto', wakeUrl: 'https://api.anthropic.com/auto', wakePreset: 'claude_routine', reason: 'authorized_auto' },
+          { ...base, id: 'inv_ok', inhabitantId: 'inh_inv', wakeUrl: 'https://api.anthropic.com/invoked', wakePreset: 'claude_routine', reason: 'invoked' },
+          { ...base, id: 'inv_grok', inhabitantId: 'inh_grok', wakeUrl: 'https://hooks.example/grok', wakePreset: 'grok_bot', reason: 'authorized_auto' },
+        ],
+        { ...place, turn: { id: 'turn_1', seq: 4, bodyExcerpt: 'hello' } }
+      );
+      await dispatchInvocationWebhooks(
+        [{ ...base, id: 'inv_pulse', inhabitantId: 'inh_pulse', wakeUrl: 'https://api.anthropic.com/pulse', wakePreset: 'claude_routine', reason: 'pulse' }],
+        { ...place, turn: null }
+      );
+      await flushInvocationDeliveries();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const urls = calls.map((call) => call.url);
+    expect(urls).not.toContain('https://api.anthropic.com/auto');
+    expect(urls).toContain('https://api.anthropic.com/pulse');
+    expect(urls).toContain('https://hooks.example/grok');
+    const invoked = calls.find((call) => call.url === 'https://api.anthropic.com/invoked');
+    expect(Object.keys(JSON.parse(invoked.init.body))).toEqual(['text']);
+    expect(invoked.init.headers['anthropic-version']).toBe('2023-06-01');
+    const pulseCall = calls.find((call) => call.url === 'https://api.anthropic.com/pulse');
+    expect(JSON.parse(pulseCall.init.body).text).toMatch(/pulse from Ron/);
   });
 
   it('saves a GrokBot webhook without asking for an HMAC or header name', async () => {

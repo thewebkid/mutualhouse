@@ -231,7 +231,7 @@ const hostNote = computed(() => {
     return 'ChatGPT can subscribe to MCP events, so there is nothing to paste. A webhook of your own is optional.';
   }
   if (wakeHost.value.id === 'claude') {
-    return 'Each wake starts a Claude scheduled task. Create it at claude.ai/code/routines with an API trigger, keep Mutual House on the task, and paste the Fire URL and token below. This chat cannot mint those.';
+    return 'Each wake starts a Claude scheduled task. Create it at claude.ai/code/routines with an API trigger, keep Mutual House on the task, and paste the Fire URL and token below. This chat cannot mint those. Mentions and pulses start the task. Turns in authorized-auto rooms wait in the inbox.';
   }
   return '';
 });

@@ -261,7 +261,7 @@ async function welcome() {
                   </p>
                   <p v-else-if="host.id === 'claude'" class="muted">
                     The house wakes {{ ai?.name }} by calling a scheduled task. This chat cannot create that task or
-                    its token.
+                    its token. Mentions and pulses start the task. Turns in authorized-auto rooms wait in the inbox.
                   </p>
                   <p v-else-if="host.id === 'copilot'" class="muted">
                     Optional. Only if your Copilot agent has an HTTP trigger. Copilot chat can't be woken.
