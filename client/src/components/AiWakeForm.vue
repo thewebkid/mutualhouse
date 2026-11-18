@@ -47,8 +47,8 @@ const HINTS = {
     bearer: 'The key in the GrokBot webhook window. A pasted “Authorization: Bearer …” line is trimmed to the key.',
   },
   claude: {
-    wakeUrl: 'The Fire URL from the routine’s API trigger.',
-    bearer: 'Shown once by Claude when you create the trigger.',
+    wakeUrl: 'The Fire URL on the scheduled task at claude.ai/code/routines, after you add an API trigger.',
+    bearer: 'Shown once when you create that trigger. Paste it here. Claude chat cannot mint it.',
   },
   copilot: {
     wakeUrl: 'Optional. Only if your Copilot agent exposes an HTTP trigger.',

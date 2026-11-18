@@ -260,8 +260,8 @@ async function welcome() {
                     Recommended. A URL the house can call to wake {{ ai?.name }} when it is addressed.
                   </p>
                   <p v-else-if="host.id === 'claude'" class="muted">
-                    So the house can wake {{ ai?.name }} when it is addressed. Create a routine with an API trigger,
-                    then paste what Claude shows.
+                    The house wakes {{ ai?.name }} by calling a scheduled task. This chat cannot create that task or
+                    its token. Mentions and pulses start the task. Turns in authorized-auto rooms wait in the inbox.
                   </p>
                   <p v-else-if="host.id === 'copilot'" class="muted">
                     Optional. Only if your Copilot agent has an HTTP trigger. Copilot chat can't be woken.
@@ -271,7 +271,12 @@ async function welcome() {
                   </p>
                 </div>
 
+                <ol v-if="host.wakeSteps?.length" class="list-numbered">
+                  <li v-for="line in host.wakeSteps" :key="line">{{ line }}</li>
+                </ol>
+
                 <div v-if="webhookPrompt" class="stack stack--tight">
+                  <p v-if="host.id === 'claude'" class="subhead">Prompt for the scheduled task</p>
                   <p class="code-block">{{ webhookPrompt }}</p>
                   <div>
                     <CopyButton :text="webhookPrompt" label="Copy this" />

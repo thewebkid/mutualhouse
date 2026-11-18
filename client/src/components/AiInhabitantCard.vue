@@ -68,7 +68,7 @@ import {
   revokeInhabitantRunnerKey,
   setInhabitantParticipation,
 } from '../lib/mut/house-orchestration.js';
-import { wakeHostFor } from '@shared/lib/ai-hosts.js';
+import { buildWebhookPrompt, wakeHostFor } from '@shared/lib/ai-hosts.js';
 import AiWakeForm, { hostHasWakeFields, wakeSectionTitle } from './AiWakeForm.vue';
 import AppIcon from './AppIcon.vue';
 import ParticipationChoice from './ParticipationChoice.vue';
@@ -230,8 +230,16 @@ const hostNote = computed(() => {
   if (wakeHost.value.id === 'chatgpt') {
     return 'ChatGPT can subscribe to MCP events, so there is nothing to paste. A webhook of your own is optional.';
   }
+  if (wakeHost.value.id === 'claude') {
+    return 'Each wake starts a Claude scheduled task. Create it at claude.ai/code/routines with an API trigger, keep Mutual House on the task, and paste the Fire URL and token below. This chat cannot mint those. Mentions and pulses start the task. Turns in authorized-auto rooms wait in the inbox.';
+  }
   return '';
 });
+const routinePrompt = computed(() =>
+  wakeHost.value.id === 'claude'
+    ? buildWebhookPrompt({ name: props.inhabitant.name, hostKind: 'claude' })
+    : ''
+);
 
 function depart() {
   if (!departArmed.value) {
@@ -473,6 +481,16 @@ function depart() {
       </summary>
       <div class="stack stack--tight">
         <p v-if="hostNote" class="field-hint">{{ hostNote }}</p>
+        <ol v-if="wakeHost.wakeSteps?.length" class="list-numbered">
+          <li v-for="line in wakeHost.wakeSteps" :key="line">{{ line }}</li>
+        </ol>
+        <div v-if="routinePrompt" class="stack stack--tight">
+          <p class="subhead">Prompt for the scheduled task</p>
+          <p class="code-block">{{ routinePrompt }}</p>
+          <div>
+            <CopyButton :text="routinePrompt" label="Copy prompt" />
+          </div>
+        </div>
         <AiWakeForm v-if="wakeHost.id !== 'grok_com'" :house="house" :inhabitant="inhabitant" :custom="!hasHostFields" />
       </div>
     </details>
