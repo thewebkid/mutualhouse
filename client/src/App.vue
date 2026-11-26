@@ -1,6 +1,7 @@
 <script setup>
 import { watch } from 'vue';
 import { RouterView } from 'vue-router';
+import { Analytics } from '@vercel/analytics/vue';
 import { globalState } from './lib/state.js';
 import AppIcon from './components/AppIcon.vue';
 
@@ -30,6 +31,7 @@ function dismissDevLink() {
 </script>
 
 <template>
+  <Analytics />
   <RouterView />
 
   <div class="toast-stack" aria-live="polite">
