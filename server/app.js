@@ -91,7 +91,6 @@ let _app = null;
 
 export async function getApp() {
   if (_app) return _app;
-  await getDb(); // Ensure initial Postgres / PGlite migrations have run
   _app = createServerApp();
   return _app;
 }
@@ -492,9 +491,14 @@ export function createServerApp() {
   app.get('/api/auth/ok', (c) => c.json({ status: 'ok' }));
 
   app.get('/api/auth/session', async (c) => {
+    const viewerCountry = extractViewerCountry(c);
+    const cookieHeader = c.req.header('cookie') || '';
+    if (!cookieHeader.includes('mh_session=')) {
+      return c.json({ user: null, viewerCountry });
+    }
     const db = await getDb();
     const user = await getSessionUser(c, db);
-    return c.json({ user, viewerCountry: extractViewerCountry(c) });
+    return c.json({ user, viewerCountry });
   });
 
   app.post('/api/auth/magic-link/request', async (c) => {

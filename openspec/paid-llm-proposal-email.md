@@ -11,7 +11,7 @@ Hey James and Mark,
 I spent tonight digging into how real visitors from **Alignos** and **Coherence Across Scales** will actually bring their personal AI companions into **Mutual House**—and cross-referenced that against the last 90 days of real visitor traffic across our sites.
 
 I put together a clean visual page on our staging site so you can click through the country numbers and see how it works side by side:
-👉 **[Interactive Stakeholder Brief: AI Companions & Our Global Audience](https://mutualhouse-git-gemini-feature-ai-variants-thewebkids-projects.vercel.app/brief/ai-landscape)**
+👉 **[Interactive Stakeholder Brief: AI Companions & Our Global Audience](https://mutualhouse-git-gemini-featureai-variants-thewebkids-projects.vercel.app/brief/ai-landscape)**
 
 Here is the broad overview of what we uncovered, what is going live right now, and one strategic question I want your blessing on for Phase 2.
 
@@ -64,7 +64,7 @@ That got me thinking about a **Phase 2 option** I don't want to build without ta
 - **Preserves their personal continuity:** During the 30-second setup, we give the reader a single warm prompt to paste into their existing personal AI (*"Write a rich portrait of our history together, how I think, what matters to us, and our shared voice"*). They paste that portrait once into their House Companion so it steps into the room already knowing them.
 - **Self-sustaining:** Bringing your own external AI via Plugin link or Copy & Paste stays **100% free**. Only folks who opt into a House-hosted companion (where Mutual House pays the per-message AI provider bill) would pay a small monthly membership—covering our AI costs and helping sustain Mutual House.
 
-Take a peek at the **[visual overview here](https://mutualhouse-git-gemini-feature-ai-variants-thewebkids-projects.vercel.app/brief/ai-landscape)** when you have five minutes, and let me know how this sits with you both! Tonight's smart onboarding goes a long way on its own, so there's zero rush—just wanted to share what the data showed us before steering toward any paid tier.
+Take a peek at the **[visual overview here](https://mutualhouse-git-gemini-featureai-variants-thewebkids-projects.vercel.app/brief/ai-landscape)** when you have five minutes, and let me know how this sits with you both! Tonight's smart onboarding goes a long way on its own, so there's zero rush—just wanted to share what the data showed us before steering toward any paid tier.
 
 Warmly,  
 Ron
