@@ -303,5 +303,17 @@ export function defaultProviderDisclosure(provider = 'custom') {
   if (p === 'copilot' || p === 'microsoft') {
     return 'Processed via Microsoft Copilot; subject to the steward’s Microsoft account and tenant data controls.';
   }
+  if (p === 'perplexity') {
+    return 'Processed via Perplexity; queries may route across Perplexity-selected models under the steward’s account settings.';
+  }
+  if (p === 'mistral') {
+    return 'Processed via Mistral Vibe; subject to the steward’s Mistral account data controls.';
+  }
+  if (p === 'muse' || p === 'meta') {
+    return 'Processed via Meta Muse; subject to the steward’s Meta Muse account and privacy controls.';
+  }
+  if (p === 'deepseek' || p === 'qwen' || p === 'kimi' || p === 'doubao') {
+    return 'Processed via the steward’s chosen AI companion app (DeepSeek, Qwen, Kimi, or Doubao) under that account’s terms.';
+  }
   return 'Processed by an external AI model under the steward’s configured provider terms.';
 }

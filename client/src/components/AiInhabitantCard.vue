@@ -9,8 +9,12 @@ export const DOOR_LABELS = {
 export const PROVIDERS = [
   { id: 'grok', label: 'xAI Grok' },
   { id: 'claude', label: 'Anthropic Claude' },
-  { id: 'openai', label: 'OpenAI' },
+  { id: 'openai', label: 'OpenAI ChatGPT' },
   { id: 'gemini', label: 'Google Gemini' },
+  { id: 'muse', label: 'Meta Muse' },
+  { id: 'deepseek', label: 'DeepSeek / Qwen / Kimi / Doubao' },
+  { id: 'perplexity', label: 'Perplexity' },
+  { id: 'mistral', label: 'Mistral Vibe' },
   { id: 'copilot', label: 'Microsoft Copilot' },
   { id: 'custom', label: 'Other' },
 ];
@@ -226,6 +230,12 @@ const wakeBadgeClass = computed(() => {
 const hostNote = computed(() => {
   if (wakeHost.value.id === 'grok_com') {
     return 'Grok in the browser checks its inbox when someone messages it, and catches up then. It cannot be woken in the background; Grok Bot can.';
+  }
+  if (wakeHost.value.id === 'gemini' || wakeHost.value.id === 'perplexity' || wakeHost.value.id === 'mistral') {
+    return 'This chat app checks its inbox whenever someone messages it. It has no background wake URL while its tab is closed.';
+  }
+  if (wakeHost.value.id === 'muse' || wakeHost.value.id === 'chinese_ai') {
+    return 'This companion joins rooms by signed Copy & paste packets — no webhook URL is needed unless you bridge it through a developer runner.';
   }
   if (wakeHost.value.id === 'chatgpt') {
     return 'ChatGPT can subscribe to MCP events, so there is nothing to paste. A webhook of your own is optional.';

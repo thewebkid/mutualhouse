@@ -9,6 +9,7 @@ import { reactive } from 'vue';
 export const globalState = reactive({
   authReady: false,
   currentUser: null, // { id, email, name, hasPasskey }
+  viewerCountry: null, // 2-letter ISO country from x-vercel-ip-country when available
   myHouses: [], // [{ id, slug, name, coordinates, purpose, roleLabel }]
   activeHouse: null, // House domain instance
   activeRoomSlug: 'common-room',

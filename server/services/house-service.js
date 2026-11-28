@@ -7,7 +7,7 @@ import {
   grantsForParticipation,
   defaultProviderDisclosure,
 } from '../../shared/models/index.js';
-import { defaultWakePresetForHost, isHostKind, providerForHost } from '../../shared/lib/ai-hosts.js';
+import { defaultDoorTypeForHost, defaultWakePresetForHost, isHostKind, providerForHost } from '../../shared/lib/ai-hosts.js';
 import { slugify } from '../../shared/lib/model-util.js';
 import { generateHouseEd25519KeyPair, randomId, sha256HexNode } from './crypto.js';
 import {
@@ -453,7 +453,7 @@ export async function createAiInhabitantInDb(
     hostKind,
     participationMode = 'contribute',
     arrivalNumber = 1,
-    doorType = 'human_prompt',
+    doorType,
     signatureNotes = '',
     modelSlug = null,
   }
@@ -471,6 +471,7 @@ export async function createAiInhabitantInDb(
   if (!cleanName) throw new Error('AI inhabitant name is required.');
   const resolvedHost = isHostKind(hostKind) ? hostKind : 'custom';
   const resolvedProvider = provider || providerForHost(resolvedHost);
+  const resolvedDoor = doorType || defaultDoorTypeForHost(resolvedHost);
   const mode = participationMode === 'readonly' ? 'readonly' : 'contribute';
   const cleanHandle = slugify(handle || cleanName) || randomId('ai');
   const id = randomId('inh');
@@ -496,7 +497,7 @@ export async function createAiInhabitantInDb(
       String(resolvedProvider || 'custom'),
       disclosure,
       modelSlug || null,
-      String(doorType || 'human_prompt'),
+      String(resolvedDoor || 'human_prompt'),
       JSON.stringify(grants),
       resolvedHost,
       defaultWakePresetForHost(resolvedHost),
