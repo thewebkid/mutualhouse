@@ -8,6 +8,7 @@ import {
   canManageAi,
 } from '../shared/models/inhabitant.js';
 import { slugify } from '../shared/lib/model-util.js';
+import { buildWelcomeMarkdown } from '../shared/lib/ai-hosts.js';
 import { getDb } from './db/index.js';
 import {
   beginWebAuthnLogin,
@@ -95,8 +96,29 @@ export async function getApp() {
   return _app;
 }
 
+function extractViewerCountry(c) {
+  const raw = String(
+    c.req.header('x-vercel-ip-country') || c.req.header('cf-ipcountry') || ''
+  )
+    .trim()
+    .toUpperCase();
+  if (/^[A-Z]{2}$/.test(raw) && raw !== 'XX' && raw !== 'T1') return raw;
+  return null;
+}
+
 export function createServerApp() {
   const app = new Hono();
+
+  app.get('/welcome.md', (c) => {
+    const md = buildWelcomeMarkdown({ originUrl: getOriginUrl(c.req.url) });
+    return new Response(md, {
+      status: 200,
+      headers: {
+        'content-type': 'text/markdown; charset=utf-8',
+        'cache-control': 'public, max-age=300',
+      },
+    });
+  });
 
   app.onError((err, c) => {
     if (err instanceof OAuthError) {
@@ -472,7 +494,7 @@ export function createServerApp() {
   app.get('/api/auth/session', async (c) => {
     const db = await getDb();
     const user = await getSessionUser(c, db);
-    return c.json({ user });
+    return c.json({ user, viewerCountry: extractViewerCountry(c) });
   });
 
   app.post('/api/auth/magic-link/request', async (c) => {

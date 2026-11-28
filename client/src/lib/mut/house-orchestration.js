@@ -23,8 +23,11 @@ function makeCommandId() {
 
 export async function loadSessionAndHouses() {
   try {
-    const { user } = await api.getSession();
+    const { user, viewerCountry } = await api.getSession();
     globalState.currentUser = user ?? null;
+    if (viewerCountry !== undefined) {
+      globalState.viewerCountry = viewerCountry ?? null;
+    }
     if (user) {
       const { houses } = await api.listMyHouses();
       globalState.myHouses = houses ?? [];

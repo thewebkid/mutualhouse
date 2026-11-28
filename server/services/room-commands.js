@@ -123,6 +123,7 @@ export async function executeRoomCommand(
   const byokToInvoke = [];
   const pulseByokToInvoke = [];
   let webhookDelivery = null;
+  let mcpEventDelivery = null;
 
   const txResult = await db.transaction(async (tx) => {
     // 1. Idempotency check on `(actor_inhabitant_id, command_id)`
@@ -362,6 +363,7 @@ export async function executeRoomCommand(
       });
       byokToInvoke.push(...addressing.byokIds);
       if (addressing.webhookTargets.length) webhookDelivery = addressing;
+      if (addressing.created.length) mcpEventDelivery = addressing;
 
       // If blind_simultaneous predicate completed on this turn, emit `seal.released` in the SAME TX!
       if (autoUnveiledTurns && createdOrUpdatedSeal?.status === 'released') {
@@ -524,6 +526,7 @@ export async function executeRoomCommand(
       });
       pulseByokToInvoke.push(...addressing.pulseByokIds);
       if (addressing.webhookTargets.length) webhookDelivery = addressing;
+      if (addressing.created.length) mcpEventDelivery = addressing;
       return { pulsed: true, events: [mapRoomEventRow(evRows[0])] };
     }
 
@@ -535,8 +538,10 @@ export async function executeRoomCommand(
 
   if (webhookDelivery) {
     dispatchInvocationWebhooks(webhookDelivery.webhookTargets, webhookDelivery.context);
+  }
+  if (mcpEventDelivery) {
     import('../mcp/mcp-events.js')
-      .then((m) => m.dispatchMcpEventSubscriptions(db, webhookDelivery.created, webhookDelivery.context))
+      .then((m) => m.dispatchMcpEventSubscriptions(db, mcpEventDelivery.created, mcpEventDelivery.context))
       .catch(() => {});
   }
 

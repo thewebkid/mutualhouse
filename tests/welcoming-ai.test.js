@@ -3,7 +3,15 @@ import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb, resetDbForTests } from '../server/db/index.js';
 import { createServerApp } from '../server/app.js';
-import { buildWebhookPrompt, getAiHost, normalizeBearerSecret, wakeHostFor } from '../shared/lib/ai-hosts.js';
+import {
+  buildBotHelperPrompt,
+  buildWebhookPrompt,
+  getAiHost,
+  listOnboardingHostsForLocale,
+  normalizeBearerSecret,
+  resolveHostOnboardingContext,
+  wakeHostFor,
+} from '../shared/lib/ai-hosts.js';
 import { dispatchInvocationWebhooks, flushInvocationDeliveries, formatClaudeRoutineBody, wakeTargetIsDeliverable } from '../server/services/invocations.js';
 import { encryptSecret, sha256HexNode } from '../server/services/crypto.js';
 
@@ -367,7 +375,7 @@ describe('Welcoming AI onboarding', () => {
     expect(self.email).toBeUndefined();
   });
 
-  it('subscribes a ChatGPT webhook and prunes a 410', async () => {
+  it('subscribes a ChatGPT webhook, fires solo on mention and tempo pulse, and prunes a 410', async () => {
     const ron = createSessionClient(app);
     await signIn(ron, 'ron@example.com', 'Ron');
     const house = await (await ron.req('/api/houses', { method: 'POST', body: { name: 'The Now', slug: 'events' } })).json();
@@ -378,25 +386,48 @@ describe('Welcoming AI onboarding', () => {
       })
     ).json();
     const secret = `whsec_${Buffer.from('signing-secret-value').toString('base64')}`;
+    const deliveredPayloads = [];
+    let shouldGone = false;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       const body = JSON.parse(init.body);
       if (body.type === 'verification') return new Response(JSON.stringify({ challenge: body.challenge }), { status: 200 });
-      return new Response('gone', { status: 410 });
+      deliveredPayloads.push(body);
+      return shouldGone ? new Response('gone', { status: 410 }) : new Response('ok', { status: 200 });
     });
-    const subscribed = await mcp(app, inhabitant.id, apiKey, 'events/subscribe', {
-      name: 'mutualhouse.invocation',
-      delivery: { mode: 'webhook', url: 'https://connectors.api.openai.com/hook', secret },
-    });
-    expect(subscribed.status).toBe(200);
-    expect((await subscribed.json()).result.id).toBeTruthy();
-    const roomId = house.house.rooms[0].id;
-    await ron.req(`/api/rooms/${roomId}/commands`, {
-      method: 'POST',
-      body: { type: 'turn.post', commandId: 'mention', payload: { body: 'Hello @lumina' } },
-    });
-    await new Promise((r) => setTimeout(r, 50));
-    expect(fetchMock).toHaveBeenCalled();
-    fetchMock.mockRestore();
+    try {
+      const subscribed = await mcp(app, inhabitant.id, apiKey, 'events/subscribe', {
+        name: 'mutualhouse.invocation',
+        delivery: { mode: 'webhook', url: 'https://connectors.api.openai.com/hook', secret },
+      });
+      expect(subscribed.status).toBe(200);
+      expect((await subscribed.json()).result.id).toBeTruthy();
+
+      const roomId = house.house.rooms[0].id;
+      // 1) Tempo pulse ('.') fires MCP Events even when wake_url is NULL
+      await ron.req(`/api/rooms/${roomId}/commands`, {
+        method: 'POST',
+        body: { type: 'room.pulse', commandId: 'pulse-1', payload: { targetInhabitantIds: [] } },
+      });
+      await new Promise((r) => setTimeout(r, 60));
+      expect(deliveredPayloads).toHaveLength(1);
+      expect(deliveredPayloads[0].data.reason).toBe('pulse');
+
+      // 2) Mention fires MCP Events and HTTP 410 prunes the subscription row
+      shouldGone = true;
+      await ron.req(`/api/rooms/${roomId}/commands`, {
+        method: 'POST',
+        body: { type: 'turn.post', commandId: 'mention', payload: { body: 'Hello @lumina' } },
+      });
+      await new Promise((r) => setTimeout(r, 60));
+      expect(deliveredPayloads).toHaveLength(2);
+      expect(deliveredPayloads[1].data.reason).toBe('invoked');
+
+      const db = await getDb();
+      const { rows } = await db.query(`SELECT * FROM mcp_event_subscriptions WHERE inhabitant_id = $1`, [inhabitant.id]);
+      expect(rows).toHaveLength(0);
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it('completes ChatGPT CIMD OAuth with RS256 private_key_jwt, SEP-3149 fallback, and MCP Events discovery', async () => {
@@ -652,5 +683,65 @@ describe('Welcoming AI onboarding', () => {
     } finally {
       fetchMock.mockRestore();
     }
+  });
+
+  it('serves zero-PII /welcome.md, extracts viewerCountry, and adapts onboarding by locale and device', async () => {
+    const welcomeRes = await app.fetch(new Request(`${ORIGIN}/welcome.md`));
+    expect(welcomeRes.status).toBe(200);
+    expect(welcomeRes.headers.get('content-type')).toMatch(/text\/markdown/);
+    const welcomeText = await welcomeRes.text();
+    expect(welcomeText).toMatch(/Mutual House/);
+    expect(welcomeText).toMatch(/Never invent or hallucinate a webhook URL/);
+    expect(welcomeText).toMatch(/Copy & Paste Arrival Packet/);
+
+    const italySession = await app.fetch(
+      new Request(`${ORIGIN}/api/auth/session`, { headers: { 'x-vercel-ip-country': 'it' } })
+    );
+    expect((await italySession.json()).viewerCountry).toBe('IT');
+
+    const unknownSession = await app.fetch(
+      new Request(`${ORIGIN}/api/auth/session`, { headers: { 'x-vercel-ip-country': 'XX' } })
+    );
+    expect((await unknownSession.json()).viewerCountry).toBeNull();
+
+    // US Desktop Gemini -> direct MCP link, no Step 3 wake form
+    const geminiUs = resolveHostOnboardingContext('gemini', { country: 'US', isMobile: false });
+    expect(geminiUs.mode).toBe('mcp');
+    expect(geminiUs.showsWakeStep).toBe(false);
+
+    // Italy or Canada Gemini -> spared missing menu, routed to packet with override
+    const geminiIt = resolveHostOnboardingContext('gemini', { country: 'IT', isMobile: false });
+    expect(geminiIt.mode).toBe('packet');
+    expect(geminiIt.canOverrideToMcp).toBe(true);
+    expect(geminiIt.limitationNotice).toMatch(/United States/);
+
+    // Mobile ChatGPT -> packet first with desktop override
+    const gptMobile = resolveHostOnboardingContext('chatgpt', { country: 'US', isMobile: true });
+    expect(gptMobile.mode).toBe('packet');
+    expect(gptMobile.canOverrideToMcp).toBe(true);
+
+    // China locale promotes DeepSeek/Qwen/Kimi/Doubao into primary choices and defaults to manual_packet
+    const cnBuckets = listOnboardingHostsForLocale({ country: 'CN', language: 'zh-CN' });
+    expect(cnBuckets.primary[0].id).toBe('chinese_ai');
+
+    const ron = createSessionClient(app);
+    await signIn(ron, 'ron@example.com', 'Ron');
+    const house = await (await ron.req('/api/houses', { method: 'POST', body: { name: 'The Now', slug: 'cn-muse' } })).json();
+    const kimi = await (
+      await ron.req(`/api/houses/${house.house.id}/inhabitants/ai`, {
+        method: 'POST',
+        body: { name: 'Kimi', hostKind: 'chinese_ai' },
+      })
+    ).json();
+    expect(kimi.inhabitant.doorType).toBe('manual_packet');
+    expect(kimi.inhabitant.provider).toBe('deepseek');
+
+    const helper = buildBotHelperPrompt({
+      name: 'Lumina',
+      mcpUrl: 'https://mutualhouse.org/mcp/inh/inh_1',
+      welcomeUrl: 'https://mutualhouse.org/welcome.md',
+    });
+    expect(helper).toMatch(/welcome\.md/);
+    expect(helper).toMatch(/language we speak together/);
   });
 });

@@ -24,6 +24,11 @@ const routes = [
     component: () => import('../pages/DisclosuresPage.vue'),
   },
   {
+    path: '/brief/ai-landscape',
+    name: 'stakeholder-brief',
+    component: () => import('../pages/StakeholderBriefPage.vue'),
+  },
+  {
     path: '/sign-in',
     name: 'sign-in',
     component: () => import('../pages/SignInPage.vue'),
